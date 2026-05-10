@@ -1502,11 +1502,11 @@ function Celestra:CreateWindow(config)
 		screenGui:Destroy()
 	end
 
-	return Window
-
 Window._registry = Registry
 Window._elements = Elements
+	end
 
+	return Window
 end
 
 return Celestra
