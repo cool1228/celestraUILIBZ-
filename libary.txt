@@ -101,6 +101,7 @@ function Celestra:CreateWindow(config)
 		Position = UDim2.new(0.5, -w/2, 0.5, -h/2),
 		BackgroundColor3 = Color3.fromRGB(12, 12, 12),
 		BorderSizePixel = 0,
+		ClipsDescendants = false,
 		ZIndex = 2,
 	}, screenGui)
 	stroke(window, Color3.fromRGB(20, 20, 20), 1)
@@ -243,9 +244,9 @@ function Celestra:CreateWindow(config)
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
 		ScrollBarThickness = 0,
-		ScrollingEnabled = true,
+		ScrollingEnabled = false,
 		ScrollingDirection = Enum.ScrollingDirection.Y,
-		ElasticBehavior = Enum.ElasticBehavior.Always,
+		ElasticBehavior = Enum.ElasticBehavior.Never,
 		CanvasSize = UDim2.new(0,0,0,0),
 		ZIndex = 2,
 	}, sidebar)
@@ -262,6 +263,7 @@ function Celestra:CreateWindow(config)
 		Position = UDim2.new(0, 175, 0, 46),
 		BackgroundColor3 = Color3.fromRGB(15,15,15),
 		BorderSizePixel = 0,
+		ClipsDescendants = true,
 		ZIndex = 2,
 	}, window)
 
@@ -270,21 +272,35 @@ function Celestra:CreateWindow(config)
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
 		ScrollBarThickness = 0,
-		ScrollingEnabled = true,
+		ScrollingEnabled = false,
 		ScrollingDirection = Enum.ScrollingDirection.Y,
-		ElasticBehavior = Enum.ElasticBehavior.Always,
+		ElasticBehavior = Enum.ElasticBehavior.Never,
 		CanvasSize = UDim2.new(0,0,0,0),
+		ClipsDescendants = true,
 		ZIndex = 2,
 	}, contentArea)
 
-	-- Smooth scroll
+	-- Smooth scroll (accumulates target so rapid scrolling doesn't snap)
+	local scrollTargets = {}
 	local function hookSlowScroll(frame)
+		scrollTargets[frame] = 0
 		frame.InputChanged:Connect(function(input)
 			if input.UserInputType == Enum.UserInputType.MouseWheel then
-				local delta = -input.Position.Z * 30
 				local maxY = math.max(0, frame.AbsoluteCanvasSize.Y - frame.AbsoluteSize.Y)
-				local target = math.clamp(frame.CanvasPosition.Y + delta, 0, maxY)
-				tween(frame, {CanvasPosition = Vector2.new(0, target)}, 0.3)
+				local current = scrollTargets[frame]
+				local target = math.clamp(current + (-input.Position.Z * 50), 0, maxY)
+				scrollTargets[frame] = target
+				tween(frame, {CanvasPosition = Vector2.new(0, target)}, 0.25)
+			end
+		end)
+		-- keep target in sync if something else moves the canvas
+		frame:GetPropertyChangedSignal("CanvasPosition"):Connect(function()
+			if scrollTargets[frame] then
+				local cy = frame.CanvasPosition.Y
+				-- only sync if it wasn't us tweening (diff > 2px means external change)
+				if math.abs(cy - scrollTargets[frame]) > 2 then
+					scrollTargets[frame] = cy
+				end
 			end
 		end)
 	end
@@ -307,6 +323,7 @@ function Celestra:CreateWindow(config)
 		ZIndex = 2,
 	}, statusBar)
 
+	-- Status dot helper
 	local function makeGlowDot(parent, col, xOff)
 		local halos = {{size=13,trans=0.92},{size=10,trans=0.87},{size=8,trans=0.82}}
 		for _, hd in ipairs(halos) do
@@ -330,6 +347,9 @@ function Celestra:CreateWindow(config)
 		corner(d, 999)
 	end
 
+	-- status helpers above handle all status text
+
+	-- Default status items (overridable)
 	local greenDot = Color3.fromRGB(50,210,95)
 	makeGlowDot(statusBar, greenDot, 16)
 	local statusLabel1 = new("TextLabel", {
@@ -371,12 +391,15 @@ function Celestra:CreateWindow(config)
 	local sbItemRefs = {}
 	local categoryOrder = 0
 
+	local pageLayouts = {}   -- [key] = UIListLayout, so showPage can read content size
+
 	local function makePage(key)
 		local page = new("Frame", {
 			Size = UDim2.new(1,0,1,0),
 			BackgroundTransparency = 1,
 			BorderSizePixel = 0,
 			Visible = false,
+			ClipsDescendants = false,   -- allow dropdown popups to overflow
 			ZIndex = 2,
 		}, pageScroll)
 		local layout = new("UIListLayout", {SortOrder=Enum.SortOrder.LayoutOrder, Padding=UDim.new(0,12)}, page)
@@ -384,10 +407,14 @@ function Celestra:CreateWindow(config)
 		pad.PaddingTop = UDim.new(0,14); pad.PaddingBottom = UDim.new(0,14)
 		pad.PaddingLeft = UDim.new(0,14); pad.PaddingRight = UDim.new(0,14)
 		pad.Parent = page
+		-- Keep canvas size in sync whenever THIS page is the active one
 		layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-			pageScroll.CanvasSize = UDim2.new(0,0,0,layout.AbsoluteContentSize.Y + 28)
+			if page.Visible then
+				pageScroll.CanvasSize = UDim2.new(0,0,0,layout.AbsoluteContentSize.Y + 28)
+			end
 		end)
 		allPages[key] = page
+		pageLayouts[key] = layout
 		return page
 	end
 
@@ -397,6 +424,12 @@ function Celestra:CreateWindow(config)
 			allPages[key].Visible = true
 			curPage = allPages[key]
 			pageScroll.CanvasPosition = Vector2.new(0,0)
+			scrollTargets[pageScroll] = 0
+			-- Update canvas size for the newly shown page
+			local layout = pageLayouts[key]
+			if layout then
+				pageScroll.CanvasSize = UDim2.new(0,0,0,layout.AbsoluteContentSize.Y + 28)
+			end
 		end
 	end
 
@@ -420,6 +453,7 @@ function Celestra:CreateWindow(config)
 	Window._allPages = allPages
 	Window._categoryOrder = 0
 
+	-- Set status text
 	function Window:SetStatus(left, right)
 		if left then statusLabel1.Text = left end
 		if right then statusLabel2.Text = right end
@@ -489,6 +523,7 @@ function Celestra:CreateWindow(config)
 			tween(subContainer, {Size=UDim2.new(1,0,0,targetH)}, 0.2)
 		end)
 
+		-- Category object
 		local Category = {}
 		Category._subContainer = subContainer
 		Category._pageOrder = 0
@@ -497,10 +532,11 @@ function Celestra:CreateWindow(config)
 		-- ── AddPage ──
 		function Category:AddPage(label)
 			self._pageOrder = self._pageOrder + 1
-			local pageKey = tostring({}):sub(10)
+			local pageKey = tostring({}):sub(10) -- unique key
 
 			local page = makePage(pageKey)
 
+			-- Sidebar item
 			local btn = new("TextButton", {
 				Size = UDim2.new(1,0,0,28),
 				BackgroundTransparency = 1,
@@ -566,6 +602,7 @@ function Celestra:CreateWindow(config)
 				if not ul.Visible then tween(lbl, {TextColor3=Color3.fromRGB(105,105,105)}, 0.1) end
 			end)
 
+			-- Auto-select first page
 			if #sbItemRefs == 1 then
 				lbl.TextColor3 = Color3.fromRGB(225,225,225)
 				lbl.Font = Enum.Font.GothamBold
@@ -574,6 +611,7 @@ function Celestra:CreateWindow(config)
 				showPage(pageKey)
 			end
 
+			-- Page object
 			local Page = {}
 			Page._page = page
 			Page._cardOrder = 0
@@ -597,6 +635,7 @@ function Celestra:CreateWindow(config)
 				stroke(card, Color3.fromRGB(32,32,32), 1)
 				new("UIListLayout", {SortOrder=Enum.SortOrder.LayoutOrder, Padding=UDim.new(0,0)}, card)
 
+				-- Section header
 				local hf = new("Frame", {
 					Size = UDim2.new(1,0,0,40),
 					BackgroundTransparency = 1,
@@ -623,6 +662,7 @@ function Celestra:CreateWindow(config)
 					ZIndex = 2,
 				}, hf)
 
+				-- Card object
 				local Card = {}
 				Card._card = card
 				Card._rowOrder = 0
@@ -1030,106 +1070,51 @@ function Celestra:CreateWindow(config)
 					}, row)
 
 					local listening = false
-
-					-- outer container matches dropdown style exactly
-					local kbFrame = new("Frame", {
-						Size = UDim2.new(0,120,0,24),
-						Position = UDim2.new(1,-136,0.5,-12),
-						BackgroundColor3 = Color3.fromRGB(22,22,22),
+					local kbBtn = new("TextButton", {
+						Size = UDim2.new(0,90,0,24),
+						Position = UDim2.new(1,-106,0.5,-12),
+						BackgroundColor3 = Color3.fromRGB(18,18,18),
 						BorderSizePixel = 0,
+						Text = boundKey,
+						TextColor3 = Color3.fromRGB(160,160,160),
+						TextSize = 11,
+						Font = Enum.Font.GothamBold,
 						ZIndex = 3,
 					}, row)
-					corner(kbFrame, 4)
-					local kbStroke = stroke(kbFrame, Color3.fromRGB(42,42,42), 1)
+					corner(kbBtn, 4)
+					local kbStroke = stroke(kbBtn, Color3.fromRGB(48,48,48), 1)
 
-					-- small key badge on left side
-					local keyBadge = new("Frame", {
-						Size = UDim2.new(0,28,0,16),
-						Position = UDim2.new(0,6,0.5,-8),
-						BackgroundColor3 = Color3.fromRGB(28,28,28),
-						BorderSizePixel = 0,
-						ZIndex = 4,
-					}, kbFrame)
-					corner(keyBadge, 3)
-					stroke(keyBadge, Color3.fromRGB(48,48,48), 1)
-
-					local keyLbl = new("TextLabel", {
-						Size = UDim2.new(1,0,1,0),
-						BackgroundTransparency = 1,
-						Text = boundKey,
-						TextColor3 = Color3.fromRGB(190,190,190),
-						TextSize = 10,
-						Font = Enum.Font.GothamBold,
-						ZIndex = 5,
-					}, keyBadge)
-
-					-- dim hint text to the right of badge
-					local hintLbl = new("TextLabel", {
-						Size = UDim2.new(1,-42,1,0),
-						Position = UDim2.new(0,40,0,0),
-						BackgroundTransparency = 1,
-						Text = "click to bind",
-						TextColor3 = Color3.fromRGB(55,55,55),
-						TextSize = 10,
-						Font = Enum.Font.Gotham,
-						TextXAlignment = Enum.TextXAlignment.Left,
-						ZIndex = 4,
-					}, kbFrame)
-
-					local clickBtn = new("TextButton", {
-						Size = UDim2.new(1,0,1,0),
-						BackgroundTransparency = 1,
-						Text = "",
-						ZIndex = 6,
-					}, kbFrame)
-
-					local function setIdle()
-						listening = false
-						tween(kbStroke, {Color=Color3.fromRGB(42,42,42)}, 0.15)
-						tween(keyLbl, {TextColor3=Color3.fromRGB(190,190,190)}, 0.15)
-						hintLbl.Text = "click to bind"
-						tween(hintLbl, {TextColor3=Color3.fromRGB(55,55,55)}, 0.15)
-					end
-
-					local function setListening()
-						listening = true
-						tween(kbStroke, {Color=Color3.fromRGB(55,100,200)}, 0.15)
-						tween(keyLbl, {TextColor3=Color3.fromRGB(120,160,255)}, 0.15)
-						hintLbl.Text = "press a key..."
-						tween(hintLbl, {TextColor3=Color3.fromRGB(100,130,220)}, 0.15)
-					end
-
-					clickBtn.MouseEnter:Connect(function()
-						if not listening then tween(kbStroke, {Color=Color3.fromRGB(58,58,58)}, 0.1) end
-					end)
-					clickBtn.MouseLeave:Connect(function()
-						if not listening then tween(kbStroke, {Color=Color3.fromRGB(42,42,42)}, 0.1) end
-					end)
-
-					clickBtn.MouseButton1Click:Connect(function()
+					kbBtn.MouseButton1Click:Connect(function()
 						if listening then return end
-						setListening()
+						listening = true
+						kbBtn.Text = "..."
+						kbBtn.TextColor3 = Color3.fromRGB(100,160,255)
+						kbStroke.Color = Color3.fromRGB(45,110,220)
 						local conn
 						conn = UserInputService.InputBegan:Connect(function(i, gp)
 							if gp then return end
 							if i.UserInputType == Enum.UserInputType.Keyboard then
 								boundKey = i.KeyCode.Name
-								keyLbl.Text = boundKey
+								kbBtn.Text = boundKey
+								kbBtn.TextColor3 = Color3.fromRGB(160,160,160)
+								kbStroke.Color = Color3.fromRGB(48,48,48)
+								listening = false
 								Registry[id] = boundKey
-								setIdle()
 								if opts.Callback then opts.Callback(boundKey) end
 								conn:Disconnect()
 							end
 						end)
 					end)
+					kbBtn.MouseEnter:Connect(function()
+						if not listening then tween(kbBtn, {BackgroundColor3=Color3.fromRGB(24,24,24)}, 0.1) end
+					end)
+					kbBtn.MouseLeave:Connect(function()
+						if not listening then tween(kbBtn, {BackgroundColor3=Color3.fromRGB(18,18,18)}, 0.1) end
+					end)
 
 					local elem = {}
 					function elem:GetValue() return Registry[id] end
-					function elem:SetValue(v)
-						boundKey = v
-						keyLbl.Text = v
-						Registry[id] = v
-					end
+					function elem:SetValue(v) boundKey = v; kbBtn.Text = v; Registry[id] = v end
 					Elements[id] = elem
 					return elem
 				end
@@ -1171,39 +1156,27 @@ function Celestra:CreateWindow(config)
 						ZIndex = 2,
 					}, row)
 
-					local isDanger = opts.Danger == true
-
 					local btn = new("TextButton", {
-						Size = UDim2.new(0,90,0,24),
-						Position = UDim2.new(1,-106,0.5,-12),
-						BackgroundColor3 = Color3.fromRGB(22,22,22),
+						Size = UDim2.new(0,90,0,26),
+						Position = UDim2.new(1,-106,0.5,-13),
+						BackgroundColor3 = Color3.fromRGB(30,70,180),
 						BorderSizePixel = 0,
 						Text = opts.ButtonText or "Execute",
-						TextColor3 = isDanger and Color3.fromRGB(210,100,100) or Color3.fromRGB(160,160,160),
-						TextSize = 11,
+						TextColor3 = Color3.fromRGB(210,225,255),
+						TextSize = 12,
 						Font = Enum.Font.GothamBold,
 						ZIndex = 3,
 					}, row)
 					corner(btn, 4)
-					local btnStroke = stroke(btn,
-						isDanger and Color3.fromRGB(90,35,35) or Color3.fromRGB(42,42,42),
-						1
-					)
-					btnStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+					stroke(btn, Color3.fromRGB(45,100,220), 1)
 
 					btn.MouseEnter:Connect(function()
-						tween(btn, {BackgroundColor3=Color3.fromRGB(28,28,28)}, 0.1)
-						tween(btnStroke, {Color=isDanger and Color3.fromRGB(130,45,45) or Color3.fromRGB(60,60,60)}, 0.1)
+						tween(btn, {BackgroundColor3=Color3.fromRGB(40,90,210)}, 0.1)
 					end)
 					btn.MouseLeave:Connect(function()
-						tween(btn, {BackgroundColor3=Color3.fromRGB(22,22,22)}, 0.1)
-						tween(btnStroke, {Color=isDanger and Color3.fromRGB(90,35,35) or Color3.fromRGB(42,42,42)}, 0.1)
+						tween(btn, {BackgroundColor3=Color3.fromRGB(30,70,180)}, 0.1)
 					end)
-					btn.MouseButton1Down:Connect(function()
-						tween(btn, {BackgroundColor3=Color3.fromRGB(32,32,32)}, 0.06)
-					end)
-					btn.MouseButton1Up:Connect(function()
-						tween(btn, {BackgroundColor3=Color3.fromRGB(28,28,28)}, 0.06)
+					btn.MouseButton1Click:Connect(function()
 						if opts.Callback then opts.Callback() end
 					end)
 				end
@@ -1360,6 +1333,7 @@ function Celestra:CreateWindow(config)
 						ZIndex = 2,
 					}, row)
 
+					-- Color preview swatch
 					local swatch = new("TextButton", {
 						Size = UDim2.new(0,40,0,22),
 						Position = UDim2.new(1,-56,0.5,-11),
@@ -1371,6 +1345,7 @@ function Celestra:CreateWindow(config)
 					corner(swatch, 4)
 					stroke(swatch, Color3.fromRGB(48,48,48), 1)
 
+					-- Mini picker popup
 					local pickerOpen = false
 					local picker = new("Frame", {
 						Size = UDim2.new(0,200,0,220),
@@ -1382,6 +1357,7 @@ function Celestra:CreateWindow(config)
 					corner(picker, 6)
 					stroke(picker, Color3.fromRGB(40,40,40), 1)
 
+					-- SV map
 					local svMap = new("ImageLabel", {
 						Size = UDim2.new(1,-16,0,140),
 						Position = UDim2.new(0,8,0,8),
@@ -1401,6 +1377,7 @@ function Celestra:CreateWindow(config)
 					}, svMap)
 					corner(svCursor, 999)
 
+					-- Hue bar
 					local hueBar = new("Frame", {
 						Size = UDim2.new(1,-16,0,14),
 						Position = UDim2.new(0,8,0,156),
@@ -1436,9 +1413,12 @@ function Celestra:CreateWindow(config)
 						if opts.Callback then opts.Callback(color) end
 					end
 
+					-- SV drag
 					local svDragging = false
 					svMap.InputBegan:Connect(function(i)
-						if i.UserInputType == Enum.UserInputType.MouseButton1 then svDragging = true end
+						if i.UserInputType == Enum.UserInputType.MouseButton1 then
+							svDragging = true
+						end
 					end)
 					UserInputService.InputEnded:Connect(function(i)
 						if i.UserInputType == Enum.UserInputType.MouseButton1 then svDragging = false end
@@ -1452,9 +1432,12 @@ function Celestra:CreateWindow(config)
 						end
 					end)
 
+					-- Hue drag
 					local hueDragging = false
 					hueBar.InputBegan:Connect(function(i)
-						if i.UserInputType == Enum.UserInputType.MouseButton1 then hueDragging = true end
+						if i.UserInputType == Enum.UserInputType.MouseButton1 then
+							hueDragging = true
+						end
 					end)
 					UserInputService.InputEnded:Connect(function(i)
 						if i.UserInputType == Enum.UserInputType.MouseButton1 then hueDragging = false end
@@ -1519,6 +1502,7 @@ function Celestra:CreateWindow(config)
 		return Category
 	end -- AddCategory
 
+	-- Global getter
 	function Window:GetValue(id)
 		return Registry[id]
 	end
@@ -1531,9 +1515,9 @@ function Celestra:CreateWindow(config)
 		screenGui:Destroy()
 	end
 
-	-- expose internals for SaveManager
-	Window._elements = Elements
-	Window._registry = Registry
+-- expose internals for SaveManager
+Window._elements = Elements
+Window._registry = Registry
 
 	return Window
 end
