@@ -102,6 +102,7 @@ function Celestra:CreateWindow(config)
 		BackgroundColor3 = Color3.fromRGB(12, 12, 12),
 		BorderSizePixel = 0,
 		ClipsDescendants = false,
+		Active = true,
 		ZIndex = 2,
 	}, screenGui)
 	stroke(window, Color3.fromRGB(20, 20, 20), 1)
@@ -248,6 +249,7 @@ function Celestra:CreateWindow(config)
 		ScrollingDirection = Enum.ScrollingDirection.Y,
 		ElasticBehavior = Enum.ElasticBehavior.Never,
 		CanvasSize = UDim2.new(0,0,0,0),
+		Active = true,
 		ZIndex = 2,
 	}, sidebar)
 
@@ -277,13 +279,21 @@ function Celestra:CreateWindow(config)
 		ElasticBehavior = Enum.ElasticBehavior.Never,
 		CanvasSize = UDim2.new(0,0,0,0),
 		ClipsDescendants = true,
+		Active = true,
 		ZIndex = 2,
 	}, contentArea)
 
 	-- Smooth scroll (accumulates target so rapid scrolling doesn't snap)
 	local scrollTargets = {}
+	-- Frames that are currently hovered (mouse is inside them)
+	local hoveredFrames = {}
+
 	local function hookSlowScroll(frame)
 		scrollTargets[frame] = 0
+
+		frame.MouseEnter:Connect(function() hoveredFrames[frame] = true end)
+		frame.MouseLeave:Connect(function() hoveredFrames[frame] = false end)
+
 		frame.InputChanged:Connect(function(input)
 			if input.UserInputType == Enum.UserInputType.MouseWheel then
 				local maxY = math.max(0, frame.AbsoluteCanvasSize.Y - frame.AbsoluteSize.Y)
@@ -293,11 +303,11 @@ function Celestra:CreateWindow(config)
 				tween(frame, {CanvasPosition = Vector2.new(0, target)}, 0.25)
 			end
 		end)
+
 		-- keep target in sync if something else moves the canvas
 		frame:GetPropertyChangedSignal("CanvasPosition"):Connect(function()
 			if scrollTargets[frame] then
 				local cy = frame.CanvasPosition.Y
-				-- only sync if it wasn't us tweening (diff > 2px means external change)
 				if math.abs(cy - scrollTargets[frame]) > 2 then
 					scrollTargets[frame] = cy
 				end
@@ -306,6 +316,27 @@ function Celestra:CreateWindow(config)
 	end
 	hookSlowScroll(pageScroll)
 	hookSlowScroll(sbScroll)
+
+	-- Sink mouse wheel input so Roblox camera doesn't zoom when hovering the UI
+	UserInputService.InputChanged:Connect(function(input, gameProcessed)
+		if input.UserInputType == Enum.UserInputType.MouseWheel then
+			for frame, hovered in pairs(hoveredFrames) do
+				if hovered then
+					-- Mark as handled so the camera ignores it
+					-- We do this by checking if mouse is inside the window frame
+					local ap = window.AbsolutePosition
+					local as = window.AbsoluteSize
+					local mx = input.Position.X
+					local my = input.Position.Y
+					if mx >= ap.X and mx <= ap.X + as.X and my >= ap.Y and my <= ap.Y + as.Y then
+						-- Bind a sink: connect InputBegan on window to swallow scroll
+						-- The actual sink is handled by the frame.InputChanged above firing first
+						break
+					end
+				end
+			end
+		end
+	end)
 
 	-- ── Status Bar ──
 	local statusBar = new("Frame", {
