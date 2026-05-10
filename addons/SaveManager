@@ -1,14 +1,9 @@
--- ============================================================
--- Celestra SaveManager
--- addons/SaveManager.lua
--- ============================================================
-
 local httpService = game:GetService('HttpService')
 
 local SaveManager = {}
-SaveManager.Folder   = 'CelestraSettings'
-SaveManager.Ignore   = {}
-SaveManager._elements = nil  -- set via SaveManager:SetWindow(Window)
+SaveManager.Folder  = 'CelestraSettings'
+SaveManager.Ignore  = {}
+SaveManager._window = nil
 
 function SaveManager:SetWindow(window)
     self._window = window
@@ -26,17 +21,12 @@ function SaveManager:SetIgnoreIndexes(list)
 end
 
 function SaveManager:BuildFolderTree()
-    local paths = {
-        self.Folder,
-        self.Folder .. '/settings',
-    }
-    for _, path in ipairs(paths) do
-        if not isfolder(path) then
-            makefolder(path)
-        end
+    for _, path in ipairs({ self.Folder, self.Folder .. '/settings' }) do
+        if not isfolder(path) then makefolder(path) end
     end
 end
 
+-- ── Save ────────────────────────────────────────────────────
 function SaveManager:Save(name)
     if not name or name:gsub(' ', '') == '' then
         return false, 'no config name given'
@@ -44,26 +34,36 @@ function SaveManager:Save(name)
 
     local data = { objects = {} }
 
-    -- Walk every registered element
-    for id, elem in next, self._window._registry do
+    for id, elem in next, self._window._elements do
         if self.Ignore[id] then continue end
 
-        local val = elem
-        local t   = type(val)
+        local ok, val = pcall(function() return elem:GetValue() end)
+        if not ok or val == nil then continue end
 
+        local t = typeof(val)
         local entry
+
         if t == 'boolean' then
             entry = { type = 'Toggle', idx = id, value = val }
         elseif t == 'number' then
             entry = { type = 'Slider', idx = id, value = val }
         elseif t == 'string' then
             entry = { type = 'Dropdown', idx = id, value = val }
-        elseif typeof(val) == 'Color3' then
+        elseif t == 'Color3' then
             entry = { type = 'ColorPicker', idx = id, value = val:ToHex() }
         end
 
         if entry then
             table.insert(data.objects, entry)
+        end
+    end
+
+    -- also save TextInput from registry (strings stored directly)
+    for id, val in next, self._window._registry do
+        if self.Ignore[id] then continue end
+        if self._window._elements[id] then continue end -- already saved above
+        if type(val) == 'string' then
+            table.insert(data.objects, { type = 'TextInput', idx = id, value = val })
         end
     end
 
@@ -74,6 +74,7 @@ function SaveManager:Save(name)
     return true
 end
 
+-- ── Load ────────────────────────────────────────────────────
 function SaveManager:Load(name)
     if not name or name:gsub(' ', '') == '' then
         return false, 'no config name given'
@@ -88,7 +89,7 @@ function SaveManager:Load(name)
     for _, obj in ipairs(decoded.objects) do
         if self.Ignore[obj.idx] then continue end
 
-        local elem = self._window:GetElement(obj.idx)
+        local elem = self._window._elements[obj.idx]
         if not elem then continue end
 
         task.spawn(function()
@@ -109,133 +110,136 @@ function SaveManager:Load(name)
     return true
 end
 
+-- ── Config list ──────────────────────────────────────────────
 function SaveManager:RefreshConfigList()
     local list = listfiles(self.Folder .. '/settings')
     local out  = {}
     for _, file in ipairs(list) do
         if file:sub(-5) == '.json' then
             local name = file:match('[/\\]([^/\\]+)%.json$')
-            if name then
-                table.insert(out, name)
-            end
+            if name then table.insert(out, name) end
         end
     end
     return out
 end
 
+-- ── Autoload ─────────────────────────────────────────────────
 function SaveManager:LoadAutoload()
     local path = self.Folder .. '/settings/autoload.txt'
     if isfile(path) then
         local name = readfile(path)
         local ok, err = self:Load(name)
         if not ok then
-            warn('[SaveManager] Failed to autoload: ' .. err)
+            warn('[SaveManager] Autoload failed: ' .. err)
         else
-            print('[SaveManager] Autoloaded config: ' .. name)
+            print('[SaveManager] Autoloaded: ' .. name)
         end
     end
 end
 
+function SaveManager:ResetAutoload()
+    local path = self.Folder .. '/settings/autoload.txt'
+    if isfile(path) then
+        writefile(path, '')
+        print('[SaveManager] Autoload cleared')
+    end
+end
+
 -- ── BuildConfigPage ──────────────────────────────────────────
--- Pass in a Celestra Page object (from Category:AddPage)
--- It will add a full config manager card to that page.
 function SaveManager:BuildConfigPage(page)
     assert(self._window, 'Call SaveManager:SetWindow(Window) first')
+    assert(self._window._elements, 'Add Window._elements = Elements to libary.txt before return Window')
 
     local card = page:AddCard('Configuration')
 
-    -- Config name input
-    local nameInput = card:AddTextInput('SaveManager_Name', {
+    card:AddTextInput('SaveManager_Name', {
         Title       = 'Config Name',
-        Desc        = 'Name for your config file.',
+        Desc        = 'Name for your new config file.',
         Placeholder = 'my_config',
     })
 
-    -- Config list dropdown (refreshed dynamically)
-    local listDropdown = card:AddDropdown('SaveManager_List', {
+    card:AddDropdown('SaveManager_List', {
         Title   = 'Config List',
-        Desc    = 'Select a saved config.',
+        Desc    = 'Select a saved config to load or overwrite.',
         Options = self:RefreshConfigList(),
     })
 
     card:AddDivider()
 
-    -- Save button
+    -- Save
     card:AddButton('SaveManager_SaveBtn', {
         Title      = 'Save Config',
-        Desc       = 'Save current settings to the named file.',
+        Desc       = 'Save current settings under the typed name.',
         ButtonText = 'Save',
         Callback   = function()
-            local name = self._window:GetValue('SaveManager_Name')
+            local name = self._window._registry['SaveManager_Name']
             local ok, err = self:Save(name)
             if ok then
                 print('[SaveManager] Saved: ' .. name)
-                -- refresh dropdown
-                local elem = self._window:GetElement('SaveManager_List')
-                if elem then elem:SetValue(self:RefreshConfigList()[1] or '') end
+                local elem = self._window._elements['SaveManager_List']
+                if elem then
+                    local configs = self:RefreshConfigList()
+                    elem:SetValue(configs[1] or '')
+                end
             else
-                warn('[SaveManager] Save failed: ' .. err)
+                warn('[SaveManager] Save failed: ' .. tostring(err))
             end
         end,
     })
 
-    -- Load button
+    -- Load
     card:AddButton('SaveManager_LoadBtn', {
         Title      = 'Load Config',
         Desc       = 'Load the selected config from the list.',
         ButtonText = 'Load',
         Callback   = function()
-            local name = self._window:GetValue('SaveManager_List')
+            local name = self._window._registry['SaveManager_List']
             local ok, err = self:Load(name)
             if ok then
                 print('[SaveManager] Loaded: ' .. name)
             else
-                warn('[SaveManager] Load failed: ' .. err)
+                warn('[SaveManager] Load failed: ' .. tostring(err))
             end
         end,
     })
 
-    -- Overwrite button
+    -- Overwrite
     card:AddButton('SaveManager_OverwriteBtn', {
         Title      = 'Overwrite Config',
         Desc       = 'Overwrite the selected config with current settings.',
         ButtonText = 'Overwrite',
         Callback   = function()
-            local name = self._window:GetValue('SaveManager_List')
+            local name = self._window._registry['SaveManager_List']
             local ok, err = self:Save(name)
             if ok then
                 print('[SaveManager] Overwrote: ' .. name)
             else
-                warn('[SaveManager] Overwrite failed: ' .. err)
+                warn('[SaveManager] Overwrite failed: ' .. tostring(err))
             end
         end,
     })
 
-    -- Refresh list button
-    card:AddButton('SaveManager_RefreshBtn', {
-        Title      = 'Refresh List',
-        Desc       = 'Reload the config file list.',
-        ButtonText = 'Refresh',
-        Callback   = function()
-            local elem = self._window:GetElement('SaveManager_List')
-            if elem then
-                local configs = self:RefreshConfigList()
-                elem:SetValue(configs[1] or '')
-            end
-        end,
-    })
-
-    -- Set autoload button
+    -- Set Autoload
     card:AddButton('SaveManager_AutoloadBtn', {
         Title      = 'Set Autoload',
         Desc       = 'Auto-load this config every time the script runs.',
         ButtonText = 'Set',
         Callback   = function()
-            local name = self._window:GetValue('SaveManager_List')
+            local name = self._window._registry['SaveManager_List']
             if name and name ~= '' then
                 writefile(self.Folder .. '/settings/autoload.txt', name)
                 print('[SaveManager] Autoload set to: ' .. name)
             end
+        end,
+    })
+
+    -- Reset Autoload
+    card:AddButton('SaveManager_ResetAutoloadBtn', {
+        Title      = 'Reset Autoload',
+        Desc       = 'Clear the autoload so no config loads on startup.',
+        ButtonText = 'Reset',
+        Callback   = function()
+            self:ResetAutoload()
         end,
     })
 
