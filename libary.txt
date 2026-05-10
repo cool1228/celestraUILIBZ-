@@ -63,20 +63,6 @@ function Celestra:CreateWindow(config)
 	local w       = config.Width   or 850
 	local h       = config.Height  or 540
 	local toggleKey = config.ToggleKey or Enum.KeyCode.RightShift
-	-- Accent color: controls toggles, sliders, underlines, focus states
-	local accent  = config.Accent  or Color3.fromRGB(45, 110, 220)
-	-- Derive a slightly lighter cap color for slider tip (15% brighter)
-	local accentCap = Color3.fromRGB(
-		math.min(255, math.floor(accent.R * 255 * 1.35)),
-		math.min(255, math.floor(accent.G * 255 * 1.35)),
-		math.min(255, math.floor(accent.B * 255 * 1.35))
-	)
-	-- Derive a dimmer glow version (50% alpha equivalent for frames)
-	local accentGlow = Color3.fromRGB(
-		math.floor(accent.R * 255 * 0.6),
-		math.floor(accent.G * 255 * 0.6),
-		math.floor(accent.B * 255 * 0.6)
-	)
 
 	-- ScreenGui
 	local screenGui = new("ScreenGui", {
@@ -85,10 +71,7 @@ function Celestra:CreateWindow(config)
 		ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
 	}, playerGui)
 
-	-- ── Responsive scaling for phone / tablet / PC ──
-	-- Computes a scale factor so the window always fits the viewport.
-	-- On a 1920px wide monitor the scale is 1.0 (no change).
-	-- On a 390px phone the scale is ~0.4 so the whole UI fits on screen.
+	-- Responsive scaling for phone / tablet / PC
 	local uiScale = Instance.new("UIScale")
 	uiScale.Parent = screenGui
 	local BASE_W = 1920
@@ -96,10 +79,8 @@ function Celestra:CreateWindow(config)
 		local vp = workspace.CurrentCamera.ViewportSize
 		local shortSide = math.min(vp.X, vp.Y)
 		local longSide  = math.max(vp.X, vp.Y)
-		-- Use the long side compared to BASE_W for landscape,
-		-- but never let the window overflow the short side either.
 		local scaleByWidth  = longSide  / BASE_W
-		local scaleByHeight = shortSide / (h + 20)  -- 20px breathing room
+		local scaleByHeight = shortSide / (h + 20)
 		uiScale.Scale = math.min(scaleByWidth, scaleByHeight, 1)
 	end
 	applyScale()
@@ -136,6 +117,7 @@ function Celestra:CreateWindow(config)
 		BackgroundColor3 = Color3.fromRGB(12, 12, 12),
 		BorderSizePixel = 0,
 		ClipsDescendants = false,
+		Active = true,
 		ZIndex = 2,
 	}, screenGui)
 	stroke(window, Color3.fromRGB(20, 20, 20), 1)
@@ -202,7 +184,15 @@ function Celestra:CreateWindow(config)
 	for _, b in ipairs(badges) do
 		local isAccent = b.type == "accent"
 		local isDanger = b.type == "danger"
-
+		local bgCol  = isAccent and Color3.fromRGB(25,70,185)
+		              or isDanger and Color3.fromRGB(130,30,30)
+		              or Color3.fromRGB(18,18,18)
+		local stCol  = isAccent and Color3.fromRGB(45,100,220)
+		              or isDanger and Color3.fromRGB(180,45,45)
+		              or Color3.fromRGB(42,42,42)
+		local txtCol = isAccent and Color3.fromRGB(210,230,255)
+		              or isDanger and Color3.fromRGB(255,160,160)
+		              or Color3.fromRGB(95,95,95)
 		local f = new("Frame", {
 			Size = UDim2.new(0, 0, 0, 19),
 			AutomaticSize = Enum.AutomaticSize.X,
@@ -290,10 +280,11 @@ function Celestra:CreateWindow(config)
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
 		ScrollBarThickness = 0,
-		ScrollingEnabled = true,
+		ScrollingEnabled = false,
 		ScrollingDirection = Enum.ScrollingDirection.Y,
-		ElasticBehavior = Enum.ElasticBehavior.Always,
+		ElasticBehavior = Enum.ElasticBehavior.Never,
 		CanvasSize = UDim2.new(0,0,0,0),
+		Active = true,
 		ZIndex = 2,
 	}, sidebar)
 
@@ -327,14 +318,27 @@ function Celestra:CreateWindow(config)
 		ZIndex = 2,
 	}, contentArea)
 
-	-- Smooth scroll
+	-- Smooth scroll with accumulated target and camera zoom sink
+	local scrollTargets = {}
+	local hoveredFrames = {}
 	local function hookSlowScroll(frame)
+		scrollTargets[frame] = 0
+		frame.MouseEnter:Connect(function() hoveredFrames[frame] = true end)
+		frame.MouseLeave:Connect(function() hoveredFrames[frame] = false end)
 		frame.InputChanged:Connect(function(input)
 			if input.UserInputType == Enum.UserInputType.MouseWheel then
-				local delta = -input.Position.Z * 40
 				local maxY = math.max(0, frame.AbsoluteCanvasSize.Y - frame.AbsoluteSize.Y)
-				local target = math.clamp(frame.CanvasPosition.Y + delta, 0, maxY)
-				tween(frame, {CanvasPosition = Vector2.new(0, target)}, 0.2)
+				local target = math.clamp(scrollTargets[frame] + (-input.Position.Z * 50), 0, maxY)
+				scrollTargets[frame] = target
+				tween(frame, {CanvasPosition = Vector2.new(0, target)}, 0.25)
+			end
+		end)
+		frame:GetPropertyChangedSignal("CanvasPosition"):Connect(function()
+			if scrollTargets[frame] then
+				local cy = frame.CanvasPosition.Y
+				if math.abs(cy - scrollTargets[frame]) > 2 then
+					scrollTargets[frame] = cy
+				end
 			end
 		end)
 	end
@@ -594,7 +598,7 @@ function Celestra:CreateWindow(config)
 			local ulGlow = new("Frame", {
 				Size = UDim2.new(0,22,0,4),
 				Position = UDim2.new(0,27,1,-5),
-				BackgroundColor3 = accent,
+				BackgroundColor3 = Color3.fromRGB(45,110,220),
 				BackgroundTransparency = 0.65,
 				BorderSizePixel = 0,
 				Visible = false,
@@ -605,7 +609,7 @@ function Celestra:CreateWindow(config)
 			local ul = new("Frame", {
 				Size = UDim2.new(0,20,0,2),
 				Position = UDim2.new(0,28,1,-4),
-				BackgroundColor3 = accentCap,
+				BackgroundColor3 = Color3.fromRGB(60,130,240),
 				BorderSizePixel = 0,
 				Visible = false,
 				ZIndex = 3,
@@ -752,8 +756,8 @@ function Celestra:CreateWindow(config)
 					corner(cb, 3)
 
 					local function refresh()
-						cbs.Color = on and accent or Color3.fromRGB(72,72,72)
-						cb.BackgroundColor3 = on and accent or Color3.fromRGB(14,14,14)
+						cbs.Color = on and Color3.fromRGB(45,110,220) or Color3.fromRGB(72,72,72)
+						cb.BackgroundColor3 = on and Color3.fromRGB(45,110,220) or Color3.fromRGB(14,14,14)
 					end
 					refresh()
 
@@ -844,7 +848,7 @@ function Celestra:CreateWindow(config)
 					local pct0 = (val - minV) / (maxV - minV)
 					local fill = new("Frame", {
 						Size = UDim2.new(pct0,0,1,0),
-						BackgroundColor3 = accent,
+						BackgroundColor3 = Color3.fromRGB(45,110,220),
 						BorderSizePixel = 0,
 						ZIndex = 4,
 					}, track)
@@ -854,7 +858,7 @@ function Celestra:CreateWindow(config)
 						Size = UDim2.new(0,3,1,0),
 						AnchorPoint = Vector2.new(0.5,0),
 						Position = UDim2.new(pct0,0,0,0),
-						BackgroundColor3 = accentCap,
+						BackgroundColor3 = Color3.fromRGB(100,165,255),
 						BorderSizePixel = 0,
 						ZIndex = 5,
 					}, track)
@@ -1052,11 +1056,10 @@ function Celestra:CreateWindow(config)
 						end
 						tween(ddList, {Size=UDim2.new(0,130,0, open and targetH or 0)}, 0.2)
 						tween(arrowLbl, {Rotation=open and 180 or 0}, 0.18)
-						tween(ddStroke, {Color=open and accent or Color3.fromRGB(48,48,48)}, 0.15)
+						tween(ddStroke, {Color=open and Color3.fromRGB(45,100,210) or Color3.fromRGB(48,48,48)}, 0.15)
 						if not open then task.delay(0.22, function() ddList.Parent = row end) end
 					end)
 
-					-- Extracted builder so SetOptions can rebuild without duplication
 					local function buildOptions(optList)
 						for _, child in ipairs(ddList:GetChildren()) do
 							if child:IsA("TextButton") then child:Destroy() end
@@ -1173,8 +1176,8 @@ function Celestra:CreateWindow(config)
 						if listening then return end
 						listening = true
 						kbBtn.Text = "..."
-						kbBtn.TextColor3 = accentCap
-						kbStroke.Color = accent
+						kbBtn.TextColor3 = Color3.fromRGB(100,160,255)
+						kbStroke.Color = Color3.fromRGB(45,110,220)
 						local conn
 						conn = UserInputService.InputBegan:Connect(function(i, gp)
 							if gp then return end
@@ -1371,7 +1374,7 @@ function Celestra:CreateWindow(config)
 					}, inputBox)
 
 					tb.Focused:Connect(function()
-						tween(inputStroke, {Color=accent}, 0.15)
+						tween(inputStroke, {Color=Color3.fromRGB(45,110,220)}, 0.15)
 					end)
 					tb.FocusLost:Connect(function()
 						tween(inputStroke, {Color=Color3.fromRGB(48,48,48)}, 0.15)
