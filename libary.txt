@@ -63,6 +63,20 @@ function Celestra:CreateWindow(config)
 	local w       = config.Width   or 850
 	local h       = config.Height  or 540
 	local toggleKey = config.ToggleKey or Enum.KeyCode.RightShift
+	-- Accent color: controls toggles, sliders, underlines, focus states
+	local accent  = config.Accent  or Color3.fromRGB(45, 110, 220)
+	-- Derive a slightly lighter cap color for slider tip (15% brighter)
+	local accentCap = Color3.fromRGB(
+		math.min(255, math.floor(accent.R * 255 * 1.35)),
+		math.min(255, math.floor(accent.G * 255 * 1.35)),
+		math.min(255, math.floor(accent.B * 255 * 1.35))
+	)
+	-- Derive a dimmer glow version (50% alpha equivalent for frames)
+	local accentGlow = Color3.fromRGB(
+		math.floor(accent.R * 255 * 0.6),
+		math.floor(accent.G * 255 * 0.6),
+		math.floor(accent.B * 255 * 0.6)
+	)
 
 	-- ScreenGui
 	local screenGui = new("ScreenGui", {
@@ -70,6 +84,26 @@ function Celestra:CreateWindow(config)
 		ResetOnSpawn = false,
 		ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
 	}, playerGui)
+
+	-- ── Responsive scaling for phone / tablet / PC ──
+	-- Computes a scale factor so the window always fits the viewport.
+	-- On a 1920px wide monitor the scale is 1.0 (no change).
+	-- On a 390px phone the scale is ~0.4 so the whole UI fits on screen.
+	local uiScale = Instance.new("UIScale")
+	uiScale.Parent = screenGui
+	local BASE_W = 1920
+	local function applyScale()
+		local vp = workspace.CurrentCamera.ViewportSize
+		local shortSide = math.min(vp.X, vp.Y)
+		local longSide  = math.max(vp.X, vp.Y)
+		-- Use the long side compared to BASE_W for landscape,
+		-- but never let the window overflow the short side either.
+		local scaleByWidth  = longSide  / BASE_W
+		local scaleByHeight = shortSide / (h + 20)  -- 20px breathing room
+		uiScale.Scale = math.min(scaleByWidth, scaleByHeight, 1)
+	end
+	applyScale()
+	workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(applyScale)
 
 	-- Glow holder
 	local glowHolder = new("Frame", {
@@ -162,30 +196,42 @@ function Celestra:CreateWindow(config)
 		ZIndex = 4,
 	}, titleBar)
 
-	-- Badges
-	local badgeX = 100
+	-- Badges — types: "accent" (blue), "danger" (red), "default" (grey)
+	local badgeX = 108
+	local badgeFrames = {}
 	for _, b in ipairs(badges) do
 		local isAccent = b.type == "accent"
+		local isDanger = b.type == "danger"
+
 		local f = new("Frame", {
 			Size = UDim2.new(0, 0, 0, 19),
 			AutomaticSize = Enum.AutomaticSize.X,
 			Position = UDim2.new(0, badgeX, 0.5, -9),
-			BackgroundColor3 = isAccent and Color3.fromRGB(25,70,185) or Color3.fromRGB(18,18,18),
+			BackgroundColor3 = bgCol,
 			BorderSizePixel = 0,
 			ZIndex = 4,
 		}, titleBar)
 		corner(f, 3)
-		stroke(f, isAccent and Color3.fromRGB(45,100,220) or Color3.fromRGB(42,42,42), 1)
-		local p = Instance.new("UIPadding"); p.PaddingLeft = UDim.new(0,7); p.PaddingRight = UDim.new(0,7); p.Parent = f
+		stroke(f, stCol, 1)
+		local p = Instance.new("UIPadding")
+		p.PaddingLeft = UDim.new(0,7); p.PaddingRight = UDim.new(0,7); p.Parent = f
 		new("TextLabel", {
 			Size = UDim2.new(1,0,1,0),
 			BackgroundTransparency = 1,
 			Text = b.text,
-			TextColor3 = isAccent and Color3.fromRGB(210,230,255) or Color3.fromRGB(95,95,95),
+			TextColor3 = txtCol,
 			TextSize = 10,
 			Font = Enum.Font.GothamBold,
 			ZIndex = 5,
 		}, f)
+		table.insert(badgeFrames, f)
+		f:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+			local x = 108
+			for _, bf in ipairs(badgeFrames) do
+				bf.Position = UDim2.new(0, x, 0.5, -9)
+				x = x + bf.AbsoluteSize.X + 6
+			end
+		end)
 		badgeX = badgeX + 52
 	end
 
@@ -548,7 +594,7 @@ function Celestra:CreateWindow(config)
 			local ulGlow = new("Frame", {
 				Size = UDim2.new(0,22,0,4),
 				Position = UDim2.new(0,27,1,-5),
-				BackgroundColor3 = Color3.fromRGB(45,110,220),
+				BackgroundColor3 = accent,
 				BackgroundTransparency = 0.65,
 				BorderSizePixel = 0,
 				Visible = false,
@@ -559,7 +605,7 @@ function Celestra:CreateWindow(config)
 			local ul = new("Frame", {
 				Size = UDim2.new(0,20,0,2),
 				Position = UDim2.new(0,28,1,-4),
-				BackgroundColor3 = Color3.fromRGB(60,130,240),
+				BackgroundColor3 = accentCap,
 				BorderSizePixel = 0,
 				Visible = false,
 				ZIndex = 3,
@@ -706,8 +752,8 @@ function Celestra:CreateWindow(config)
 					corner(cb, 3)
 
 					local function refresh()
-						cbs.Color = on and Color3.fromRGB(45,110,220) or Color3.fromRGB(72,72,72)
-						cb.BackgroundColor3 = on and Color3.fromRGB(45,110,220) or Color3.fromRGB(14,14,14)
+						cbs.Color = on and accent or Color3.fromRGB(72,72,72)
+						cb.BackgroundColor3 = on and accent or Color3.fromRGB(14,14,14)
 					end
 					refresh()
 
@@ -798,7 +844,7 @@ function Celestra:CreateWindow(config)
 					local pct0 = (val - minV) / (maxV - minV)
 					local fill = new("Frame", {
 						Size = UDim2.new(pct0,0,1,0),
-						BackgroundColor3 = Color3.fromRGB(45,110,220),
+						BackgroundColor3 = accent,
 						BorderSizePixel = 0,
 						ZIndex = 4,
 					}, track)
@@ -808,7 +854,7 @@ function Celestra:CreateWindow(config)
 						Size = UDim2.new(0,3,1,0),
 						AnchorPoint = Vector2.new(0.5,0),
 						Position = UDim2.new(pct0,0,0,0),
-						BackgroundColor3 = Color3.fromRGB(100,165,255),
+						BackgroundColor3 = accentCap,
 						BorderSizePixel = 0,
 						ZIndex = 5,
 					}, track)
@@ -952,13 +998,7 @@ function Celestra:CreateWindow(config)
 						task.delay(0.22, function() if not open then ddList.Parent = row end end)
 					end
 
-					-- Extracted so SetOptions can rebuild without duplicating code
-					local function buildOptions(optList)
-						for _, child in ipairs(ddList:GetChildren()) do
-							if child:IsA("TextButton") then child:Destroy() end
-						end
-						targetH = #optList * itemH
-						for i, opt in ipairs(optList) do
+					for i, opt in ipairs(options) do
 						local optBtn = new("TextButton", {
 							Size = UDim2.new(1,0,0,itemH),
 							BackgroundTransparency = 1,
@@ -994,9 +1034,6 @@ function Celestra:CreateWindow(config)
 							if opts.Callback then opts.Callback(opt) end
 						end)
 					end
-					end -- end buildOptions
-
-					buildOptions(options) -- initial population
 
 					local clickBtn = new("TextButton", {
 						Size = UDim2.new(1,0,1,0),
@@ -1015,9 +1052,53 @@ function Celestra:CreateWindow(config)
 						end
 						tween(ddList, {Size=UDim2.new(0,130,0, open and targetH or 0)}, 0.2)
 						tween(arrowLbl, {Rotation=open and 180 or 0}, 0.18)
-						tween(ddStroke, {Color=open and Color3.fromRGB(45,100,210) or Color3.fromRGB(48,48,48)}, 0.15)
+						tween(ddStroke, {Color=open and accent or Color3.fromRGB(48,48,48)}, 0.15)
 						if not open then task.delay(0.22, function() ddList.Parent = row end) end
 					end)
+
+					-- Extracted builder so SetOptions can rebuild without duplication
+					local function buildOptions(optList)
+						for _, child in ipairs(ddList:GetChildren()) do
+							if child:IsA("TextButton") then child:Destroy() end
+						end
+						targetH = #optList * itemH
+						for i, opt in ipairs(optList) do
+							local optBtn2 = new("TextButton", {
+								Size = UDim2.new(1,0,0,itemH),
+								BackgroundTransparency = 1,
+								BorderSizePixel = 0,
+								Text = "",
+								LayoutOrder = i,
+								ZIndex = 101,
+							}, ddList)
+							local optLbl2 = new("TextLabel", {
+								Size = UDim2.new(1,-10,1,0),
+								Position = UDim2.new(0,10,0,0),
+								BackgroundTransparency = 1,
+								Text = opt,
+								TextColor3 = Color3.fromRGB(155,155,155),
+								TextSize = 12,
+								Font = Enum.Font.Gotham,
+								TextXAlignment = Enum.TextXAlignment.Left,
+								ZIndex = 102,
+							}, optBtn2)
+							optBtn2.MouseEnter:Connect(function()
+								tween(optBtn2, {BackgroundTransparency=0, BackgroundColor3=Color3.fromRGB(28,28,28)}, 0.1)
+								optLbl2.TextColor3 = Color3.fromRGB(215,215,215)
+							end)
+							optBtn2.MouseLeave:Connect(function()
+								tween(optBtn2, {BackgroundTransparency=1}, 0.1)
+								optLbl2.TextColor3 = Color3.fromRGB(155,155,155)
+							end)
+							optBtn2.MouseButton1Click:Connect(function()
+								selected = opt
+								selectedLbl.Text = opt
+								Registry[id] = opt
+								closeDropdown()
+								if opts.Callback then opts.Callback(opt) end
+							end)
+						end
+					end
 
 					local elem = {}
 					function elem:GetValue() return Registry[id] end
@@ -1092,8 +1173,8 @@ function Celestra:CreateWindow(config)
 						if listening then return end
 						listening = true
 						kbBtn.Text = "..."
-						kbBtn.TextColor3 = Color3.fromRGB(100,160,255)
-						kbStroke.Color = Color3.fromRGB(45,110,220)
+						kbBtn.TextColor3 = accentCap
+						kbStroke.Color = accent
 						local conn
 						conn = UserInputService.InputBegan:Connect(function(i, gp)
 							if gp then return end
@@ -1160,27 +1241,36 @@ function Celestra:CreateWindow(config)
 						ZIndex = 2,
 					}, row)
 
+					local isDanger = opts.Danger == true
 					local btn = new("TextButton", {
-						Size = UDim2.new(0,90,0,26),
-						Position = UDim2.new(1,-106,0.5,-13),
-						BackgroundColor3 = Color3.fromRGB(30,70,180),
+						Size = UDim2.new(0,90,0,24),
+						Position = UDim2.new(1,-106,0.5,-12),
+						BackgroundColor3 = Color3.fromRGB(22,22,22),
 						BorderSizePixel = 0,
 						Text = opts.ButtonText or "Execute",
-						TextColor3 = Color3.fromRGB(210,225,255),
-						TextSize = 12,
+						TextColor3 = isDanger and Color3.fromRGB(210,100,100) or Color3.fromRGB(210,210,210),
+						TextSize = 11,
 						Font = Enum.Font.GothamBold,
 						ZIndex = 3,
 					}, row)
 					corner(btn, 4)
-					stroke(btn, Color3.fromRGB(45,100,220), 1)
+					local btnStroke = stroke(btn,
+						isDanger and Color3.fromRGB(90,35,35) or Color3.fromRGB(42,42,42), 1)
+					btnStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 
 					btn.MouseEnter:Connect(function()
-						tween(btn, {BackgroundColor3=Color3.fromRGB(40,90,210)}, 0.1)
+						tween(btn, {BackgroundColor3=Color3.fromRGB(28,28,28)}, 0.1)
+						tween(btnStroke, {Color=isDanger and Color3.fromRGB(130,45,45) or Color3.fromRGB(60,60,60)}, 0.1)
 					end)
 					btn.MouseLeave:Connect(function()
-						tween(btn, {BackgroundColor3=Color3.fromRGB(30,70,180)}, 0.1)
+						tween(btn, {BackgroundColor3=Color3.fromRGB(22,22,22)}, 0.1)
+						tween(btnStroke, {Color=isDanger and Color3.fromRGB(90,35,35) or Color3.fromRGB(42,42,42)}, 0.1)
 					end)
-					btn.MouseButton1Click:Connect(function()
+					btn.MouseButton1Down:Connect(function()
+						tween(btn, {BackgroundColor3=Color3.fromRGB(32,32,32)}, 0.06)
+					end)
+					btn.MouseButton1Up:Connect(function()
+						tween(btn, {BackgroundColor3=Color3.fromRGB(28,28,28)}, 0.06)
 						if opts.Callback then opts.Callback() end
 					end)
 				end
@@ -1281,7 +1371,7 @@ function Celestra:CreateWindow(config)
 					}, inputBox)
 
 					tb.Focused:Connect(function()
-						tween(inputStroke, {Color=Color3.fromRGB(45,110,220)}, 0.15)
+						tween(inputStroke, {Color=accent}, 0.15)
 					end)
 					tb.FocusLost:Connect(function()
 						tween(inputStroke, {Color=Color3.fromRGB(48,48,48)}, 0.15)
