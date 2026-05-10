@@ -36,13 +36,10 @@ function SaveManager:Save(name)
 
     for id, elem in next, self._window._elements do
         if self.Ignore[id] then continue end
-
         local ok, val = pcall(function() return elem:GetValue() end)
         if not ok or val == nil then continue end
-
         local t = typeof(val)
         local entry
-
         if t == 'boolean' then
             entry = { type = 'Toggle', idx = id, value = val }
         elseif t == 'number' then
@@ -52,16 +49,12 @@ function SaveManager:Save(name)
         elseif t == 'Color3' then
             entry = { type = 'ColorPicker', idx = id, value = val:ToHex() }
         end
-
-        if entry then
-            table.insert(data.objects, entry)
-        end
+        if entry then table.insert(data.objects, entry) end
     end
 
-    -- also save TextInput from registry (strings stored directly)
     for id, val in next, self._window._registry do
         if self.Ignore[id] then continue end
-        if self._window._elements[id] then continue end -- already saved above
+        if self._window._elements[id] then continue end
         if type(val) == 'string' then
             table.insert(data.objects, { type = 'TextInput', idx = id, value = val })
         end
@@ -69,7 +62,6 @@ function SaveManager:Save(name)
 
     local ok, encoded = pcall(httpService.JSONEncode, httpService, data)
     if not ok then return false, 'encode failed' end
-
     writefile(self.Folder .. '/settings/' .. name .. '.json', encoded)
     return true
 end
@@ -79,19 +71,14 @@ function SaveManager:Load(name)
     if not name or name:gsub(' ', '') == '' then
         return false, 'no config name given'
     end
-
     local path = self.Folder .. '/settings/' .. name .. '.json'
     if not isfile(path) then return false, 'file not found' end
-
     local ok, decoded = pcall(httpService.JSONDecode, httpService, readfile(path))
     if not ok then return false, 'decode failed' end
-
     for _, obj in ipairs(decoded.objects) do
         if self.Ignore[obj.idx] then continue end
-
         local elem = self._window._elements[obj.idx]
         if not elem then continue end
-
         task.spawn(function()
             if obj.type == 'Toggle' then
                 elem:SetValue(obj.value)
@@ -106,7 +93,25 @@ function SaveManager:Load(name)
             end
         end)
     end
+    return true
+end
 
+-- ── Delete ───────────────────────────────────────────────────
+function SaveManager:Delete(name)
+    if not name or name:gsub(' ', '') == '' then
+        return false, 'no config name given'
+    end
+    local path = self.Folder .. '/settings/' .. name .. '.json'
+    if not isfile(path) then return false, 'file not found' end
+    -- guard: don't delete the active autoload
+    local autoloadPath = self.Folder .. '/settings/autoload.txt'
+    if isfile(autoloadPath) then
+        local autoloaded = readfile(autoloadPath)
+        if autoloaded == name then
+            return false, 'cannot delete the active autoload config'
+        end
+    end
+    delfile(path)
     return true
 end
 
@@ -145,6 +150,90 @@ function SaveManager:ResetAutoload()
     end
 end
 
+-- ── Helper: twin-button row ───────────────────────────────────
+-- Adds a row with two side-by-side buttons styled to match the library.
+-- Uses the card's internal frame directly via card._card.
+local function addTwinButtons(card, rowOrder, btnA, btnB)
+    -- reuse card's row counter
+    card._rowOrder = card._rowOrder + 1
+
+    local TweenService = game:GetService('TweenService')
+    local function tw(inst, props, t)
+        TweenService:Create(inst, TweenInfo.new(t or 0.12, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), props):Play()
+    end
+    local function corner(p, r)
+        local c = Instance.new('UICorner'); c.CornerRadius = UDim.new(0, r or 6); c.Parent = p
+    end
+    local function stroke(p, col, th)
+        local s = Instance.new('UIStroke'); s.Color = col; s.Thickness = th or 1; s.Parent = p; return s
+    end
+
+    local row = Instance.new('Frame')
+    row.Size = UDim2.new(1, 0, 0, 52)
+    row.BackgroundTransparency = 1
+    row.BorderSizePixel = 0
+    row.LayoutOrder = card._rowOrder
+    row.ZIndex = 2
+    row.Parent = card._card
+
+    local function makeBtn(def, xPos, width)
+        -- label + desc on left side (only for first button)
+        if def.Title and xPos == 0 then
+            local lbl = Instance.new('TextLabel')
+            lbl.Size = UDim2.new(1, -220, 0, 20)
+            lbl.Position = UDim2.new(0, 16, 0, 8)
+            lbl.BackgroundTransparency = 1
+            lbl.Text = def.Title
+            lbl.TextColor3 = Color3.fromRGB(215, 215, 215)
+            lbl.TextSize = 13
+            lbl.Font = Enum.Font.GothamBold
+            lbl.TextXAlignment = Enum.TextXAlignment.Left
+            lbl.ZIndex = 2
+            lbl.Parent = row
+
+            local desc = Instance.new('TextLabel')
+            desc.Size = UDim2.new(1, -220, 0, 15)
+            desc.Position = UDim2.new(0, 16, 0, 30)
+            desc.BackgroundTransparency = 1
+            desc.Text = def.Desc or ''
+            desc.TextColor3 = Color3.fromRGB(72, 72, 72)
+            desc.TextSize = 11
+            desc.Font = Enum.Font.Gotham
+            desc.TextXAlignment = Enum.TextXAlignment.Left
+            desc.ZIndex = 2
+            desc.Parent = row
+        end
+
+        local isDanger = def.Danger == true
+
+        local btn = Instance.new('TextButton')
+        btn.Size = UDim2.new(0, width, 0, 26)
+        btn.Position = UDim2.new(1, xPos, 0.5, -13)
+        btn.BackgroundColor3 = isDanger and Color3.fromRGB(140, 30, 30) or Color3.fromRGB(30, 70, 180)
+        btn.BorderSizePixel = 0
+        btn.Text = def.Text
+        btn.TextColor3 = isDanger and Color3.fromRGB(255, 200, 200) or Color3.fromRGB(210, 225, 255)
+        btn.TextSize = 12
+        btn.Font = Enum.Font.GothamBold
+        btn.ZIndex = 3
+        btn.Parent = row
+        corner(btn, 4)
+        stroke(btn, isDanger and Color3.fromRGB(190, 50, 50) or Color3.fromRGB(45, 100, 220), 1)
+
+        local normalBg = isDanger and Color3.fromRGB(140, 30, 30) or Color3.fromRGB(30, 70, 180)
+        local hoverBg  = isDanger and Color3.fromRGB(170, 40, 40) or Color3.fromRGB(40, 90, 210)
+        btn.MouseEnter:Connect(function() tw(btn, { BackgroundColor3 = hoverBg }) end)
+        btn.MouseLeave:Connect(function() tw(btn, { BackgroundColor3 = normalBg }) end)
+        btn.MouseButton1Click:Connect(function() if def.Callback then def.Callback() end end)
+
+        return btn
+    end
+
+    -- two buttons flush to the right: B at far right, A just left of it
+    makeBtn(btnA, -(btnB and 210 or 106), 96)
+    if btnB then makeBtn(btnB, -106, 96) end
+end
+
 -- ── BuildConfigPage ──────────────────────────────────────────
 function SaveManager:BuildConfigPage(page)
     assert(self._window, 'Call SaveManager:SetWindow(Window) first')
@@ -154,94 +243,110 @@ function SaveManager:BuildConfigPage(page)
 
     card:AddTextInput('SaveManager_Name', {
         Title       = 'Config Name',
-        Desc        = 'Name for your new config file.',
+        Desc        = 'Name your config, then hit Save.',
         Placeholder = 'my_config',
     })
 
     card:AddDropdown('SaveManager_List', {
-        Title   = 'Config List',
-        Desc    = 'Select a saved config to load or overwrite.',
+        Title   = 'Saved Configs',
+        Desc    = 'Pick a config to load, overwrite, or delete.',
         Options = self:RefreshConfigList(),
     })
 
     card:AddDivider()
 
-    -- Save
-    card:AddButton('SaveManager_SaveBtn', {
-        Title      = 'Save Config',
-        Desc       = 'Save current settings under the typed name.',
-        ButtonText = 'Save',
-        Callback   = function()
-            local name = self._window._registry['SaveManager_Name']
-            local ok, err = self:Save(name)
-            if ok then
-                print('[SaveManager] Saved: ' .. name)
-                local elem = self._window._elements['SaveManager_List']
-                if elem then
-                    local configs = self:RefreshConfigList()
-                    elem:SetValue(configs[1] or '')
+    local function refreshList()
+        local elem = self._window._elements['SaveManager_List']
+        if elem then
+            local configs = self:RefreshConfigList()
+            elem:SetValue(configs[1] or '')
+        end
+    end
+
+    -- Row 1: Save | Load
+    addTwinButtons(card, nil,
+        {
+            Title    = 'Save / Load',
+            Desc     = 'Save new or load selected.',
+            Text     = 'Save',
+            Callback = function()
+                local name = self._window._registry['SaveManager_Name']
+                local ok, err = self:Save(name)
+                if ok then
+                    print('[SaveManager] Saved: ' .. name)
+                    refreshList()
+                else
+                    warn('[SaveManager] Save failed: ' .. tostring(err))
                 end
-            else
-                warn('[SaveManager] Save failed: ' .. tostring(err))
-            end
-        end,
-    })
+            end,
+        },
+        {
+            Text     = 'Load',
+            Callback = function()
+                local name = self._window._registry['SaveManager_List']
+                local ok, err = self:Load(name)
+                if ok then
+                    print('[SaveManager] Loaded: ' .. name)
+                else
+                    warn('[SaveManager] Load failed: ' .. tostring(err))
+                end
+            end,
+        }
+    )
 
-    -- Load
-    card:AddButton('SaveManager_LoadBtn', {
-        Title      = 'Load Config',
-        Desc       = 'Load the selected config from the list.',
-        ButtonText = 'Load',
-        Callback   = function()
-            local name = self._window._registry['SaveManager_List']
-            local ok, err = self:Load(name)
-            if ok then
-                print('[SaveManager] Loaded: ' .. name)
-            else
-                warn('[SaveManager] Load failed: ' .. tostring(err))
-            end
-        end,
-    })
+    -- Row 2: Overwrite | Delete
+    addTwinButtons(card, nil,
+        {
+            Title    = 'Overwrite / Delete',
+            Desc     = 'Overwrite or remove selected config.',
+            Text     = 'Overwrite',
+            Callback = function()
+                local name = self._window._registry['SaveManager_List']
+                local ok, err = self:Save(name)
+                if ok then
+                    print('[SaveManager] Overwrote: ' .. name)
+                else
+                    warn('[SaveManager] Overwrite failed: ' .. tostring(err))
+                end
+            end,
+        },
+        {
+            Text     = 'Delete',
+            Danger   = true,
+            Callback = function()
+                local name = self._window._registry['SaveManager_List']
+                local ok, err = self:Delete(name)
+                if ok then
+                    print('[SaveManager] Deleted: ' .. name)
+                    refreshList()
+                else
+                    warn('[SaveManager] Delete failed: ' .. tostring(err))
+                end
+            end,
+        }
+    )
 
-    -- Overwrite
-    card:AddButton('SaveManager_OverwriteBtn', {
-        Title      = 'Overwrite Config',
-        Desc       = 'Overwrite the selected config with current settings.',
-        ButtonText = 'Overwrite',
-        Callback   = function()
-            local name = self._window._registry['SaveManager_List']
-            local ok, err = self:Save(name)
-            if ok then
-                print('[SaveManager] Overwrote: ' .. name)
-            else
-                warn('[SaveManager] Overwrite failed: ' .. tostring(err))
-            end
-        end,
-    })
-
-    -- Set Autoload
-    card:AddButton('SaveManager_AutoloadBtn', {
-        Title      = 'Set Autoload',
-        Desc       = 'Auto-load this config every time the script runs.',
-        ButtonText = 'Set',
-        Callback   = function()
-            local name = self._window._registry['SaveManager_List']
-            if name and name ~= '' then
-                writefile(self.Folder .. '/settings/autoload.txt', name)
-                print('[SaveManager] Autoload set to: ' .. name)
-            end
-        end,
-    })
-
-    -- Reset Autoload
-    card:AddButton('SaveManager_ResetAutoloadBtn', {
-        Title      = 'Reset Autoload',
-        Desc       = 'Clear the autoload so no config loads on startup.',
-        ButtonText = 'Reset',
-        Callback   = function()
-            self:ResetAutoload()
-        end,
-    })
+    -- Row 3: Set Autoload | Reset
+    addTwinButtons(card, nil,
+        {
+            Title    = 'Autoload',
+            Desc     = 'Auto-load selected config on startup.',
+            Text     = 'Set',
+            Callback = function()
+                local name = self._window._registry['SaveManager_List']
+                if name and name ~= '' then
+                    writefile(self.Folder .. '/settings/autoload.txt', name)
+                    print('[SaveManager] Autoload set to: ' .. name)
+                end
+            end,
+        },
+        {
+            Text     = 'Reset',
+            Callback = function()
+                self:ResetAutoload()
+            end,
+        }
+    )
 
     self:SetIgnoreIndexes({ 'SaveManager_Name', 'SaveManager_List' })
 end
