@@ -185,13 +185,13 @@ function Celestra:CreateWindow(config)
 		local isAccent = b.type == "accent"
 		local isDanger = b.type == "danger"
 		local bgCol  = isAccent and Color3.fromRGB(25,70,185)
-		              or isDanger and Color3.fromRGB(20,90,40)
+		              or isDanger and Color3.fromRGB(130,30,30)
 		              or Color3.fromRGB(18,18,18)
 		local stCol  = isAccent and Color3.fromRGB(45,100,220)
-		              or isDanger and Color3.fromRGB(35,140,60)
+		              or isDanger and Color3.fromRGB(180,45,45)
 		              or Color3.fromRGB(42,42,42)
 		local txtCol = isAccent and Color3.fromRGB(210,230,255)
-		              or isDanger and Color3.fromRGB(140,255,160)
+		              or isDanger and Color3.fromRGB(255,160,160)
 		              or Color3.fromRGB(95,95,95)
 		local f = new("Frame", {
 			Size = UDim2.new(0, 0, 0, 19),
