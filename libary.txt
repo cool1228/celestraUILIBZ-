@@ -1503,6 +1503,8 @@ function Celestra:CreateWindow(config)
 	end
 
 	return Window
+Window._registry = Registry
+Window._elements = Elements
 end
 
 return Celestra
