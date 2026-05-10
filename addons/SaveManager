@@ -32,9 +32,7 @@ function SaveManager:Save(name)
     if not name or name:gsub(' ', '') == '' then
         return false, 'no config name given'
     end
-
     local data = { objects = {} }
-
     for id, elem in next, self._window._elements do
         if self.Ignore[id] then continue end
         local ok, val = pcall(function() return elem:GetValue() end)
@@ -52,7 +50,6 @@ function SaveManager:Save(name)
         end
         if entry then table.insert(data.objects, entry) end
     end
-
     for id, val in next, self._window._registry do
         if self.Ignore[id] then continue end
         if self._window._elements[id] then continue end
@@ -60,7 +57,6 @@ function SaveManager:Save(name)
             table.insert(data.objects, { type = 'TextInput', idx = id, value = val })
         end
     end
-
     local ok, encoded = pcall(httpService.JSONEncode, httpService, data)
     if not ok then return false, 'encode failed' end
     writefile(self.Folder .. '/settings/' .. name .. '.json', encoded)
@@ -161,31 +157,31 @@ end
 
 local function makeGhostButton(parent, text, xOffset, width, isDanger)
     local btn = Instance.new('TextButton')
-    btn.Size        = UDim2.new(0, width, 0, 24)
-    btn.Position    = UDim2.new(1, xOffset, 0.5, -12)
+    btn.Size             = UDim2.new(0, width, 0, 24)
+    btn.Position         = UDim2.new(1, xOffset, 0.5, -12)
     btn.BackgroundColor3 = Color3.fromRGB(22, 22, 22)
     btn.BorderSizePixel  = 0
-    btn.Text        = text
-    btn.TextColor3  = isDanger and Color3.fromRGB(210, 100, 100) or Color3.fromRGB(160, 160, 160)
-    btn.TextSize    = 11
-    btn.Font        = Enum.Font.GothamBold
-    btn.ZIndex      = 3
-    btn.Parent      = parent
+    btn.Text             = text
+    btn.TextColor3       = isDanger and Color3.fromRGB(210, 100, 100) or Color3.fromRGB(160, 160, 160)
+    btn.TextSize         = 11
+    btn.Font             = Enum.Font.GothamBold
+    btn.ZIndex           = 3
+    btn.Parent           = parent
 
     local c = Instance.new('UICorner')
-    c.CornerRadius  = UDim.new(0, 4)
-    c.Parent        = btn
+    c.CornerRadius = UDim.new(0, 4)
+    c.Parent = btn
 
     local s = Instance.new('UIStroke')
-    s.Color         = isDanger and Color3.fromRGB(90, 35, 35) or Color3.fromRGB(42, 42, 42)
-    s.Thickness     = 1
-    s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border  -- keeps stroke off the text
-    s.Parent        = btn
+    s.Color           = isDanger and Color3.fromRGB(90, 35, 35) or Color3.fromRGB(42, 42, 42)
+    s.Thickness       = 1
+    s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    s.Parent          = btn
 
-    local normalBg    = Color3.fromRGB(22, 22, 22)
-    local hoverBg     = Color3.fromRGB(28, 28, 28)
-    local pressBg     = Color3.fromRGB(32, 32, 32)
-    local normalStroke = isDanger and Color3.fromRGB(90, 35, 35)  or Color3.fromRGB(42, 42, 42)
+    local normalBg     = Color3.fromRGB(22, 22, 22)
+    local hoverBg      = Color3.fromRGB(28, 28, 28)
+    local pressBg      = Color3.fromRGB(32, 32, 32)
+    local normalStroke = isDanger and Color3.fromRGB(90,  35, 35) or Color3.fromRGB(42, 42, 42)
     local hoverStroke  = isDanger and Color3.fromRGB(130, 45, 45) or Color3.fromRGB(60, 60, 60)
 
     btn.MouseEnter:Connect(function()
@@ -207,45 +203,41 @@ local function makeGhostButton(parent, text, xOffset, width, isDanger)
 end
 
 -- ── Twin-button row ───────────────────────────────────────────
--- Writes directly into card._card so it integrates with the card's UIListLayout.
 local function addTwinButtons(card, rowTitle, rowDesc, btnAText, btnBText, btnBDanger, cbA, cbB)
     card._rowOrder = card._rowOrder + 1
 
     local row = Instance.new('Frame')
-    row.Size                = UDim2.new(1, 0, 0, 52)
+    row.Size                   = UDim2.new(1, 0, 0, 52)
     row.BackgroundTransparency = 1
-    row.BorderSizePixel     = 0
-    row.LayoutOrder         = card._rowOrder
-    row.ZIndex              = 2
-    row.Parent              = card._card
+    row.BorderSizePixel        = 0
+    row.LayoutOrder            = card._rowOrder
+    row.ZIndex                 = 2
+    row.Parent                 = card._card
 
-    -- title
     local lbl = Instance.new('TextLabel')
-    lbl.Size               = UDim2.new(1, -220, 0, 20)
-    lbl.Position           = UDim2.new(0, 16, 0, 8)
+    lbl.Size                   = UDim2.new(1, -220, 0, 20)
+    lbl.Position               = UDim2.new(0, 16, 0, 8)
     lbl.BackgroundTransparency = 1
-    lbl.Text               = rowTitle or ''
-    lbl.TextColor3         = Color3.fromRGB(215, 215, 215)
-    lbl.TextSize           = 13
-    lbl.Font               = Enum.Font.GothamBold
-    lbl.TextXAlignment     = Enum.TextXAlignment.Left
-    lbl.ZIndex             = 2
-    lbl.Parent             = row
+    lbl.Text                   = rowTitle or ''
+    lbl.TextColor3             = Color3.fromRGB(215, 215, 215)
+    lbl.TextSize               = 13
+    lbl.Font                   = Enum.Font.GothamBold
+    lbl.TextXAlignment         = Enum.TextXAlignment.Left
+    lbl.ZIndex                 = 2
+    lbl.Parent                 = row
 
-    -- desc
     local desc = Instance.new('TextLabel')
-    desc.Size               = UDim2.new(1, -220, 0, 15)
-    desc.Position           = UDim2.new(0, 16, 0, 30)
+    desc.Size                   = UDim2.new(1, -220, 0, 15)
+    desc.Position               = UDim2.new(0, 16, 0, 30)
     desc.BackgroundTransparency = 1
-    desc.Text               = rowDesc or ''
-    desc.TextColor3         = Color3.fromRGB(72, 72, 72)
-    desc.TextSize           = 11
-    desc.Font               = Enum.Font.Gotham
-    desc.TextXAlignment     = Enum.TextXAlignment.Left
-    desc.ZIndex             = 2
-    desc.Parent             = row
+    desc.Text                   = rowDesc or ''
+    desc.TextColor3             = Color3.fromRGB(72, 72, 72)
+    desc.TextSize               = 11
+    desc.Font                   = Enum.Font.Gotham
+    desc.TextXAlignment         = Enum.TextXAlignment.Left
+    desc.ZIndex                 = 2
+    desc.Parent                 = row
 
-    -- two sharp ghost buttons flush to the right
     local btnA = makeGhostButton(row, btnAText, -210, 96, false)
     local btnB = makeGhostButton(row, btnBText, -106, 96, btnBDanger)
 
@@ -256,7 +248,7 @@ end
 -- ── BuildConfigPage ──────────────────────────────────────────
 function SaveManager:BuildConfigPage(page)
     assert(self._window,           'Call SaveManager:SetWindow(Window) first')
-    assert(self._window._elements, 'Add Window._elements = Elements to libary.txt before return Window')
+    assert(self._window._elements, 'Window._elements missing — add it to libary.txt before return Window')
 
     local card = page:AddCard('Configuration')
 
@@ -274,29 +266,36 @@ function SaveManager:BuildConfigPage(page)
 
     card:AddDivider()
 
+    -- Refreshes the dropdown list after save/delete without requiring a rejoin
     local function refreshList()
         local elem = self._window._elements['SaveManager_List']
-        if elem then
-            local configs = self:RefreshConfigList()
-            elem:SetValue(configs[1] or '')
+        if elem and elem.SetOptions then
+            elem:SetOptions(self:RefreshConfigList())
         end
     end
 
     -- Row 1: Save | Load
     addTwinButtons(card,
-        'Save / Load', 'Save new or load selected config.',
+        'Save / Load', 'Save new config or load selected.',
         'Save', 'Load', false,
         function()
             local name = self._window._registry['SaveManager_Name']
             local ok, err = self:Save(name)
-            if ok then print('[SaveManager] Saved: ' .. name); refreshList()
-            else warn('[SaveManager] Save failed: ' .. tostring(err)) end
+            if ok then
+                print('[SaveManager] Saved: ' .. name)
+                refreshList()
+            else
+                warn('[SaveManager] Save failed: ' .. tostring(err))
+            end
         end,
         function()
             local name = self._window._registry['SaveManager_List']
             local ok, err = self:Load(name)
-            if ok then print('[SaveManager] Loaded: ' .. name)
-            else warn('[SaveManager] Load failed: ' .. tostring(err)) end
+            if ok then
+                print('[SaveManager] Loaded: ' .. name)
+            else
+                warn('[SaveManager] Load failed: ' .. tostring(err))
+            end
         end
     )
 
@@ -307,20 +306,27 @@ function SaveManager:BuildConfigPage(page)
         function()
             local name = self._window._registry['SaveManager_List']
             local ok, err = self:Save(name)
-            if ok then print('[SaveManager] Overwrote: ' .. name)
-            else warn('[SaveManager] Overwrite failed: ' .. tostring(err)) end
+            if ok then
+                print('[SaveManager] Overwrote: ' .. name)
+            else
+                warn('[SaveManager] Overwrite failed: ' .. tostring(err))
+            end
         end,
         function()
             local name = self._window._registry['SaveManager_List']
             local ok, err = self:Delete(name)
-            if ok then print('[SaveManager] Deleted: ' .. name); refreshList()
-            else warn('[SaveManager] Delete failed: ' .. tostring(err)) end
+            if ok then
+                print('[SaveManager] Deleted: ' .. name)
+                refreshList()
+            else
+                warn('[SaveManager] Delete failed: ' .. tostring(err))
+            end
         end
     )
 
-    -- Row 3: Set Autoload | Reset
+    -- Row 3: Set Autoload | Reset Autoload
     addTwinButtons(card,
-        'Autoload', 'Auto-load selected config on startup.',
+        'Autoload', 'Auto-load selected config on every script run.',
         'Set Autoload', 'Reset', false,
         function()
             local name = self._window._registry['SaveManager_List']
