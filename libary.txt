@@ -1189,6 +1189,7 @@ function Celestra:CreateWindow(config)
 						isDanger and Color3.fromRGB(90,35,35) or Color3.fromRGB(42,42,42),
 						1
 					)
+					btnStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 
 					btn.MouseEnter:Connect(function()
 						tween(btn, {BackgroundColor3=Color3.fromRGB(28,28,28)}, 0.1)
