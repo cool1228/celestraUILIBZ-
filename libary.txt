@@ -102,7 +102,6 @@ function Celestra:CreateWindow(config)
 		BackgroundColor3 = Color3.fromRGB(12, 12, 12),
 		BorderSizePixel = 0,
 		ClipsDescendants = false,
-		Active = true,
 		ZIndex = 2,
 	}, screenGui)
 	stroke(window, Color3.fromRGB(20, 20, 20), 1)
@@ -245,11 +244,10 @@ function Celestra:CreateWindow(config)
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
 		ScrollBarThickness = 0,
-		ScrollingEnabled = false,
+		ScrollingEnabled = true,
 		ScrollingDirection = Enum.ScrollingDirection.Y,
-		ElasticBehavior = Enum.ElasticBehavior.Never,
+		ElasticBehavior = Enum.ElasticBehavior.Always,
 		CanvasSize = UDim2.new(0,0,0,0),
-		Active = true,
 		ZIndex = 2,
 	}, sidebar)
 
@@ -273,70 +271,29 @@ function Celestra:CreateWindow(config)
 		Size = UDim2.new(1,0,1,0),
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
-		ScrollBarThickness = 0,
-		ScrollingEnabled = false,
+		ScrollBarThickness = 3,
+		ScrollBarImageColor3 = Color3.fromRGB(55,55,55),
+		ScrollingEnabled = true,
 		ScrollingDirection = Enum.ScrollingDirection.Y,
-		ElasticBehavior = Enum.ElasticBehavior.Never,
+		ElasticBehavior = Enum.ElasticBehavior.Always,
 		CanvasSize = UDim2.new(0,0,0,0),
 		ClipsDescendants = true,
-		Active = true,
 		ZIndex = 2,
 	}, contentArea)
 
-	-- Smooth scroll (accumulates target so rapid scrolling doesn't snap)
-	local scrollTargets = {}
-	-- Frames that are currently hovered (mouse is inside them)
-	local hoveredFrames = {}
-
+	-- Smooth scroll
 	local function hookSlowScroll(frame)
-		scrollTargets[frame] = 0
-
-		frame.MouseEnter:Connect(function() hoveredFrames[frame] = true end)
-		frame.MouseLeave:Connect(function() hoveredFrames[frame] = false end)
-
 		frame.InputChanged:Connect(function(input)
 			if input.UserInputType == Enum.UserInputType.MouseWheel then
+				local delta = -input.Position.Z * 40
 				local maxY = math.max(0, frame.AbsoluteCanvasSize.Y - frame.AbsoluteSize.Y)
-				local current = scrollTargets[frame]
-				local target = math.clamp(current + (-input.Position.Z * 50), 0, maxY)
-				scrollTargets[frame] = target
-				tween(frame, {CanvasPosition = Vector2.new(0, target)}, 0.25)
-			end
-		end)
-
-		-- keep target in sync if something else moves the canvas
-		frame:GetPropertyChangedSignal("CanvasPosition"):Connect(function()
-			if scrollTargets[frame] then
-				local cy = frame.CanvasPosition.Y
-				if math.abs(cy - scrollTargets[frame]) > 2 then
-					scrollTargets[frame] = cy
-				end
+				local target = math.clamp(frame.CanvasPosition.Y + delta, 0, maxY)
+				tween(frame, {CanvasPosition = Vector2.new(0, target)}, 0.2)
 			end
 		end)
 	end
 	hookSlowScroll(pageScroll)
 	hookSlowScroll(sbScroll)
-
-	-- Sink mouse wheel input so Roblox camera doesn't zoom when hovering the UI
-	UserInputService.InputChanged:Connect(function(input, gameProcessed)
-		if input.UserInputType == Enum.UserInputType.MouseWheel then
-			for frame, hovered in pairs(hoveredFrames) do
-				if hovered then
-					-- Mark as handled so the camera ignores it
-					-- We do this by checking if mouse is inside the window frame
-					local ap = window.AbsolutePosition
-					local as = window.AbsoluteSize
-					local mx = input.Position.X
-					local my = input.Position.Y
-					if mx >= ap.X and mx <= ap.X + as.X and my >= ap.Y and my <= ap.Y + as.Y then
-						-- Bind a sink: connect InputBegan on window to swallow scroll
-						-- The actual sink is handled by the frame.InputChanged above firing first
-						break
-					end
-				end
-			end
-		end
-	end)
 
 	-- ── Status Bar ──
 	local statusBar = new("Frame", {
@@ -455,7 +412,6 @@ function Celestra:CreateWindow(config)
 			allPages[key].Visible = true
 			curPage = allPages[key]
 			pageScroll.CanvasPosition = Vector2.new(0,0)
-			scrollTargets[pageScroll] = 0
 			-- Update canvas size for the newly shown page
 			local layout = pageLayouts[key]
 			if layout then
@@ -996,7 +952,13 @@ function Celestra:CreateWindow(config)
 						task.delay(0.22, function() if not open then ddList.Parent = row end end)
 					end
 
-					for i, opt in ipairs(options) do
+					-- Extracted so SetOptions can rebuild without duplicating code
+					local function buildOptions(optList)
+						for _, child in ipairs(ddList:GetChildren()) do
+							if child:IsA("TextButton") then child:Destroy() end
+						end
+						targetH = #optList * itemH
+						for i, opt in ipairs(optList) do
 						local optBtn = new("TextButton", {
 							Size = UDim2.new(1,0,0,itemH),
 							BackgroundTransparency = 1,
@@ -1032,6 +994,9 @@ function Celestra:CreateWindow(config)
 							if opts.Callback then opts.Callback(opt) end
 						end)
 					end
+					end -- end buildOptions
+
+					buildOptions(options) -- initial population
 
 					local clickBtn = new("TextButton", {
 						Size = UDim2.new(1,0,1,0),
@@ -1057,6 +1022,14 @@ function Celestra:CreateWindow(config)
 					local elem = {}
 					function elem:GetValue() return Registry[id] end
 					function elem:SetValue(v) selected = v; selectedLbl.Text = v; Registry[id] = v; if opts.Callback then opts.Callback(v) end end
+					function elem:SetOptions(newOptions)
+						closeDropdown()
+						buildOptions(newOptions)
+						local first = newOptions[1] or ""
+						selected = first
+						selectedLbl.Text = first
+						Registry[id] = first
+					end
 					Elements[id] = elem
 					return elem
 				end
