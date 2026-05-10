@@ -263,7 +263,7 @@ function Celestra:CreateWindow(config)
 		Position = UDim2.new(0, 175, 0, 46),
 		BackgroundColor3 = Color3.fromRGB(15,15,15),
 		BorderSizePixel = 0,
-		ClipsDescendants = false,
+		ClipsDescendants = true,
 		ZIndex = 2,
 	}, window)
 
@@ -277,7 +277,7 @@ function Celestra:CreateWindow(config)
 		ScrollingDirection = Enum.ScrollingDirection.Y,
 		ElasticBehavior = Enum.ElasticBehavior.Always,
 		CanvasSize = UDim2.new(0,0,0,0),
-		ClipsDescendants = false,
+		ClipsDescendants = true,
 		ZIndex = 2,
 	}, contentArea)
 
