@@ -279,18 +279,12 @@ function Celestra:CreateWindow(config)
 
 	-- Smooth scroll
 	local function hookSlowScroll(frame)
-		UserInputService.InputChanged:Connect(function(input)
+		frame.InputChanged:Connect(function(input)
 			if input.UserInputType == Enum.UserInputType.MouseWheel then
-				local mp = UserInputService:GetMouseLocation()
-				local ap = frame.AbsolutePosition
-				local as = frame.AbsoluteSize
-				if mp.X >= ap.X and mp.X <= ap.X + as.X and
-					mp.Y >= ap.Y and mp.Y <= ap.Y + as.Y then
-					local delta = -input.Position.Z * 30
-					local maxY = math.max(0, frame.AbsoluteCanvasSize.Y - frame.AbsoluteSize.Y)
-					local target = math.clamp(frame.CanvasPosition.Y + delta, 0, maxY)
-					tween(frame, {CanvasPosition = Vector2.new(0, target)}, 0.3)
-				end
+				local delta = -input.Position.Z * 30
+				local maxY = math.max(0, frame.AbsoluteCanvasSize.Y - frame.AbsoluteSize.Y)
+				local target = math.clamp(frame.CanvasPosition.Y + delta, 0, maxY)
+				tween(frame, {CanvasPosition = Vector2.new(0, target)}, 0.3)
 			end
 		end)
 	end
@@ -1259,7 +1253,7 @@ function Celestra:CreateWindow(config)
 						PlaceholderColor3 = Color3.fromRGB(65,65,65),
 						TextColor3 = Color3.fromRGB(200,200,200),
 						TextSize = 12,
-						Font = Enum.Font.Gotham,
+						Font = Env.Font.Gotham,
 						TextXAlignment = Enum.TextXAlignment.Left,
 						ClearTextOnFocus = false,
 						ZIndex = 4,
