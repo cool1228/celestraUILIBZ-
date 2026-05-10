@@ -1,0 +1,294 @@
+-- ============================================================
+-- Celestra UI Library — Full Example Script
+-- Shows every available element: Toggle, Slider, Dropdown,
+-- Keybind, Button, TextInput, ColorPicker, Label, Divider
+-- ============================================================
+
+-- Load Celestra
+local Celestra = loadstring(game:HttpGet(
+    "https://raw.githubusercontent.com/cool1228/celestraUILIBZ-/refs/heads/main/libary.txt"
+))()
+
+-- Load SaveManager
+local SaveManager = loadstring(game:HttpGet(
+    "https://raw.githubusercontent.com/cool1228/celestraUILIBZ-/refs/heads/main/addons/SaveManager"
+))()
+
+-- ============================================================
+-- CREATE WINDOW
+-- Badges support three types:
+--   "accent"  → blue  (e.g. BETA, NEW)
+--   "danger"  → red   (e.g. PAID, ADMIN)
+--   "default" → grey  (e.g. version numbers)
+-- You can add as many badges as you like, or remove them all.
+-- ============================================================
+local Window = Celestra:CreateWindow({
+    Title       = "Celestra",        -- Window title text
+    Width       = 850,
+    Height      = 540,
+    ToggleKey   = Enum.KeyCode.RightShift,
+    Status      = "Status: Connected",
+    StatusRight = "Game: Example",
+    Badges      = {
+        { text = "BETA",   type = "accent"  },  -- blue badge
+        { text = "PAID",   type = "default"  },  -- red badge  — remove this line if not needed
+        { text = "v0.1.0", type = "default" },  -- grey badge — change text to any version string
+    },
+})
+
+SaveManager:SetWindow(Window)
+
+-- ============================================================
+-- CATEGORY: Examples  (all element types demonstrated here)
+-- ============================================================
+local exampleCat  = Window:AddCategory("Examples")
+local examplePage = exampleCat:AddPage("Elements")
+
+-- ── Card 1: Toggles ─────────────────────────────────────────
+local toggleCard = examplePage:AddCard("Toggles")
+
+local tog1 = toggleCard:AddToggle("tog_esp", {
+    Title    = "ESP",
+    Desc     = "Render player outlines through walls.",
+    Default  = false,
+    Callback = function(value)
+        print("ESP:", value)
+    end,
+})
+
+local tog2 = toggleCard:AddToggle("tog_aimbot", {
+    Title    = "Aimbot",
+    Desc     = "Automatically aim at the nearest player.",
+    Default  = false,
+    Callback = function(value)
+        print("Aimbot:", value)
+    end,
+})
+
+local tog3 = toggleCard:AddToggle("tog_noclip", {
+    Title    = "Noclip",
+    Desc     = "Walk through walls and terrain.",
+    Default  = false,
+    Callback = function(value)
+        print("Noclip:", value)
+    end,
+})
+
+-- ── Card 2: Sliders ─────────────────────────────────────────
+local sliderCard = examplePage:AddCard("Sliders")
+
+local sld1 = sliderCard:AddSlider("sld_fov", {
+    Title    = "FOV Circle",
+    Desc     = "Radius of the aimbot FOV circle.",
+    Min      = 10,
+    Max      = 500,
+    Default  = 120,
+    Callback = function(value)
+        print("FOV:", value)
+    end,
+})
+
+local sld2 = sliderCard:AddSlider("sld_speed", {
+    Title    = "Walk Speed",
+    Desc     = "Character movement speed.",
+    Min      = 16,
+    Max      = 250,
+    Default  = 16,
+    Callback = function(value)
+        game.Players.LocalPlayer.Character.Humanoid.WalkSpeed = value
+    end,
+})
+
+local sld3 = sliderCard:AddSlider("sld_jump", {
+    Title    = "Jump Power",
+    Desc     = "Character jump height.",
+    Min      = 0,
+    Max      = 200,
+    Default  = 50,
+    Callback = function(value)
+        game.Players.LocalPlayer.Character.Humanoid.JumpPower = value
+    end,
+})
+
+-- ── Card 3: Dropdowns ───────────────────────────────────────
+local dropCard = examplePage:AddCard("Dropdowns")
+
+local dd1 = dropCard:AddDropdown("dd_team", {
+    Title    = "Team",
+    Desc     = "Which team to highlight.",
+    Options  = { "All", "Enemy", "Friendly", "None" },
+    Default  = "All",
+    Callback = function(value)
+        print("Team filter:", value)
+    end,
+})
+
+local dd2 = dropCard:AddDropdown("dd_bone", {
+    Title    = "Aim Bone",
+    Desc     = "Which bone the aimbot targets.",
+    Options  = { "Head", "Neck", "Torso", "Left Arm", "Right Arm" },
+    Default  = "Head",
+    Callback = function(value)
+        print("Aim bone:", value)
+    end,
+})
+
+local dd3 = dropCard:AddDropdown("dd_theme", {
+    Title    = "Prediction",
+    Desc     = "Bullet-drop prediction mode.",
+    Options  = { "Off", "Low", "Medium", "High" },
+    Default  = "Off",
+    Callback = function(value)
+        print("Prediction:", value)
+    end,
+})
+
+-- ── Card 4: Keybinds ────────────────────────────────────────
+local keybindCard = examplePage:AddCard("Keybinds")
+
+local kb1 = keybindCard:AddKeybind("kb_aimbot", {
+    Title    = "Aimbot Hold Key",
+    Desc     = "Hold this key to activate aimbot.",
+    Default  = "E",
+    Callback = function(key)
+        print("Aimbot key set to:", key)
+    end,
+})
+
+local kb2 = keybindCard:AddKeybind("kb_esp", {
+    Title    = "ESP Toggle Key",
+    Desc     = "Press to toggle ESP on/off.",
+    Default  = "Z",
+    Callback = function(key)
+        print("ESP key set to:", key)
+    end,
+})
+
+-- ── Card 5: Color Pickers ───────────────────────────────────
+local colorCard = examplePage:AddCard("Color Pickers")
+
+local cp1 = colorCard:AddColorPicker("cp_esp_color", {
+    Title    = "ESP Color",
+    Desc     = "Color of the ESP outline.",
+    Default  = Color3.fromRGB(255, 80, 80),
+    Callback = function(color)
+        print("ESP color:", color)
+    end,
+})
+
+local cp2 = colorCard:AddColorPicker("cp_chams", {
+    Title    = "Chams Color",
+    Desc     = "Color of player chams.",
+    Default  = Color3.fromRGB(80, 180, 255),
+    Callback = function(color)
+        print("Chams color:", color)
+    end,
+})
+
+local cp3 = colorCard:AddColorPicker("cp_tracers", {
+    Title    = "Tracer Color",
+    Desc     = "Color of player tracers.",
+    Default  = Color3.fromRGB(255, 255, 80),
+    Callback = function(color)
+        print("Tracer color:", color)
+    end,
+})
+
+-- ── Card 6: Text Inputs ─────────────────────────────────────
+local inputCard = examplePage:AddCard("Text Inputs")
+
+local ti1 = inputCard:AddTextInput("ti_username", {
+    Title       = "Target Username",
+    Desc        = "Only aim at this player (leave blank for all).",
+    Placeholder = "Username...",
+    Default     = "",
+    Callback    = function(value)
+        print("Target username:", value)
+    end,
+})
+
+local ti2 = inputCard:AddTextInput("ti_prefix", {
+    Title       = "Chat Prefix",
+    Desc        = "Command prefix for chat commands.",
+    Placeholder = "e.g.  !",
+    Default     = "!",
+    Callback    = function(value)
+        print("Prefix:", value)
+    end,
+})
+
+-- ── Card 7: Buttons ─────────────────────────────────────────
+local buttonCard = examplePage:AddCard("Buttons")
+
+buttonCard:AddButton("btn_teleport", {
+    Title      = "Teleport to Spawn",
+    Desc       = "Instantly move to the spawn location.",
+    ButtonText = "Teleport",
+    Callback   = function()
+        local char = game.Players.LocalPlayer.Character
+        if char then
+            char:MoveTo(Vector3.new(0, 5, 0))
+        end
+    end,
+})
+
+buttonCard:AddDivider()
+
+buttonCard:AddButton("btn_rejoin", {
+    Title      = "Rejoin Server",
+    Desc       = "Leave and instantly rejoin the same server.",
+    ButtonText = "Rejoin",
+    Callback   = function()
+        local tp = game:GetService("TeleportService")
+        tp:Teleport(game.PlaceId, game.Players.LocalPlayer)
+    end,
+})
+
+buttonCard:AddDivider()
+
+buttonCard:AddButton("btn_reset", {
+    Title      = "Reset Character",
+    Desc       = "Kill and respawn your character.",
+    ButtonText = "Reset",
+    Danger     = true,
+    Callback   = function()
+        game.Players.LocalPlayer.Character.Humanoid.Health = 0
+    end,
+})
+
+-- ── Card 8: Labels ──────────────────────────────────────────
+local labelCard = examplePage:AddCard("Labels")
+
+local lbl1 = labelCard:AddLabel({
+    Text     = "Labels can display dynamic information — update them any time with :SetText().",
+    Color    = Color3.fromRGB(130, 130, 130),
+    TextSize = 12,
+})
+
+local lbl2 = labelCard:AddLabel({
+    Text  = "Ping: calculating...",
+    Color = Color3.fromRGB(100, 200, 100),
+})
+
+-- Update ping label every second as an example
+task.spawn(function()
+    while task.wait(1) do
+        local ping = game:GetService("Stats").Network.ServerStatsItem["Data Ping"]:GetValue()
+        lbl2:SetText(("Ping: %d ms"):format(ping))
+        lbl2:SetColor(
+            ping < 80  and Color3.fromRGB(100, 220, 100) or
+            ping < 150 and Color3.fromRGB(230, 200, 60)  or
+                           Color3.fromRGB(220, 80, 80)
+        )
+    end
+end)
+
+-- ============================================================
+-- CATEGORY: Settings  (SaveManager config page)
+-- ============================================================
+local settingsCat = Window:AddCategory("Settings")
+local configPage  = settingsCat:AddPage("Config")
+SaveManager:BuildConfigPage(configPage)
+
+-- Auto-load saved config on startup
+SaveManager:LoadAutoload()
