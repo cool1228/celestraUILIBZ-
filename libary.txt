@@ -75,19 +75,13 @@ function Celestra:CreateWindow(config)
 	local uiScale = Instance.new("UIScale")
 	uiScale.Parent = screenGui
 	local BASE_W = 1920
-	local isMobile = UserInputService.TouchEnabled and not UserInputService.MouseEnabled
 	local function applyScale()
 		local vp = workspace.CurrentCamera.ViewportSize
 		local shortSide = math.min(vp.X, vp.Y)
 		local longSide  = math.max(vp.X, vp.Y)
-		if isMobile then
-			-- fit the 850px-wide window into the short side of a phone screen with padding
-			uiScale.Scale = math.min(shortSide / (w + 60), 1)
-		else
-			local scaleByWidth  = longSide  / BASE_W
-			local scaleByHeight = shortSide / (h + 20)
-			uiScale.Scale = math.min(scaleByWidth, scaleByHeight, 1)
-		end
+		local scaleByWidth  = longSide  / BASE_W
+		local scaleByHeight = shortSide / (h + 20)
+		uiScale.Scale = math.min(scaleByWidth, scaleByHeight, 1)
 	end
 	applyScale()
 	workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(applyScale)
@@ -153,10 +147,9 @@ function Celestra:CreateWindow(config)
 		ZIndex = 3,
 	}, titleBar)
 
-	-- Drag on title bar (mouse + touch)
+	-- Drag on title bar
 	titleBar.InputBegan:Connect(function(i)
-		if i.UserInputType == Enum.UserInputType.MouseButton1 or
-		   i.UserInputType == Enum.UserInputType.Touch then
+		if i.UserInputType == Enum.UserInputType.MouseButton1 then
 			dragging = true
 			dragStart = i.Position
 			startPos = window.Position
@@ -169,10 +162,7 @@ function Celestra:CreateWindow(config)
 		if i.UserInputType == Enum.UserInputType.MouseMovement then dragInput = i end
 	end)
 	UserInputService.InputChanged:Connect(function(i)
-		if dragging and (i.UserInputType == Enum.UserInputType.MouseMovement or
-		                 i.UserInputType == Enum.UserInputType.Touch) then
-			updateDrag(i)
-		end
+		if i == dragInput and dragging then updateDrag(i) end
 	end)
 
 	-- Title label
@@ -256,92 +246,16 @@ function Celestra:CreateWindow(config)
 	local closeBtn = winBtn("×", -30)
 	local minBtn   = winBtn("−", -56)
 	closeBtn.MouseButton1Click:Connect(function() screenGui:Destroy() end)
-	closeBtn.InputEnded:Connect(function(i)
-		if i.UserInputType == Enum.UserInputType.Touch then screenGui:Destroy() end
-	end)
-
-	-- Draggable black circle shown when minimized
-	local minCircle = new("Frame", {
-		Size = UDim2.new(0, 54, 0, 54),
-		Position = UDim2.new(0, 20, 1, -90),
-		BackgroundColor3 = Color3.fromRGB(0, 0, 0),
-		BorderSizePixel = 0,
-		ZIndex = 600,
-		Visible = false,
-	}, screenGui)
-	corner(minCircle, 999)
-	stroke(minCircle, Color3.fromRGB(45, 45, 45), 1.5)
-	new("TextLabel", {
-		Size = UDim2.new(1, 0, 1, 0),
-		BackgroundTransparency = 1,
-		Text = "C",
-		TextColor3 = Color3.fromRGB(255, 255, 255),
-		TextSize = 24,
-		Font = Enum.Font.GothamBold,
-		ZIndex = 601,
-	}, minCircle)
-
-	-- Drag the circle (mouse + touch)
-	local cDragging, cDragStart, cStartPos = false, nil, nil
-	minCircle.InputBegan:Connect(function(i)
-		if i.UserInputType == Enum.UserInputType.MouseButton1 or
-		   i.UserInputType == Enum.UserInputType.Touch then
-			cDragging = true
-			cDragStart = i.Position
-			cStartPos = minCircle.Position
-		end
-	end)
-	UserInputService.InputChanged:Connect(function(i)
-		if cDragging and (i.UserInputType == Enum.UserInputType.MouseMovement or
-		                  i.UserInputType == Enum.UserInputType.Touch) then
-			local d = i.Position - cDragStart
-			minCircle.Position = UDim2.new(cStartPos.X.Scale, cStartPos.X.Offset + d.X,
-			                               cStartPos.Y.Scale, cStartPos.Y.Offset + d.Y)
-		end
-	end)
-	UserInputService.InputEnded:Connect(function(i)
-		if i.UserInputType == Enum.UserInputType.MouseButton1 or
-		   i.UserInputType == Enum.UserInputType.Touch then
-			cDragging = false
-		end
-	end)
-
-	-- Tap circle to restore window
-	local cTapStart = Vector2.new(0, 0)
-	minCircle.InputBegan:Connect(function(i)
-		if i.UserInputType == Enum.UserInputType.Touch then
-			cTapStart = Vector2.new(i.Position.X, i.Position.Y)
-		end
-	end)
-	minCircle.InputEnded:Connect(function(i)
-		if i.UserInputType == Enum.UserInputType.Touch then
-			if (Vector2.new(i.Position.X, i.Position.Y) - cTapStart).Magnitude < 15 and not cDragging then
-				window.Visible = true
-				glowHolder.Visible = true
-				minCircle.Visible = false
-			end
-		end
-	end)
-	minCircle.MouseButton1Click:Connect(function()
-		window.Visible = true
-		glowHolder.Visible = true
-		minCircle.Visible = false
-	end)
 
 	local minimized = false
 	minBtn.MouseButton1Click:Connect(function()
 		minimized = not minimized
-		window.Visible = not minimized
-		glowHolder.Visible = not minimized
-		minCircle.Visible = minimized
-	end)
-	minBtn.InputEnded:Connect(function(i)
-		if i.UserInputType == Enum.UserInputType.Touch then
-			minimized = not minimized
-			window.Visible = not minimized
-			glowHolder.Visible = not minimized
-			minCircle.Visible = minimized
+		for _, c in pairs(window:GetChildren()) do
+			if c ~= titleBar then c.Visible = not minimized end
 		end
+		local nh = minimized and 46 or h
+		tween(window, {Size = UDim2.new(0, w, 0, nh)}, 0.25)
+		glowHolder.Size = UDim2.new(0, w, 0, nh)
 	end)
 
 	-- ── Sidebar ──
@@ -366,7 +280,7 @@ function Celestra:CreateWindow(config)
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
 		ScrollBarThickness = 0,
-		ScrollingEnabled = true,
+		ScrollingEnabled = false,
 		ScrollingDirection = Enum.ScrollingDirection.Y,
 		ElasticBehavior = Enum.ElasticBehavior.Never,
 		CanvasSize = UDim2.new(0,0,0,0),
@@ -718,30 +632,6 @@ function Celestra:CreateWindow(config)
 				ulGlow.Visible = true
 				showPage(pageKey)
 			end)
-			-- Touch support for tabs
-			local tabTapStart = Vector2.new(0,0)
-			btn.InputBegan:Connect(function(i)
-				if i.UserInputType == Enum.UserInputType.Touch then
-					tabTapStart = Vector2.new(i.Position.X, i.Position.Y)
-				end
-			end)
-			btn.InputEnded:Connect(function(i)
-				if i.UserInputType == Enum.UserInputType.Touch then
-					if (Vector2.new(i.Position.X, i.Position.Y) - tabTapStart).Magnitude < 20 then
-						for _, r in ipairs(sbItemRefs) do
-							tween(r.lbl, {TextColor3=Color3.fromRGB(105,105,105)}, 0.12)
-							r.lbl.Font = Enum.Font.Gotham
-							r.ul.Visible = false
-							r.ulGlow.Visible = false
-						end
-						tween(lbl, {TextColor3=Color3.fromRGB(225,225,225)}, 0.12)
-						lbl.Font = Enum.Font.GothamBold
-						ul.Visible = true
-						ulGlow.Visible = true
-						showPage(pageKey)
-					end
-				end
-			end)
 			btn.MouseEnter:Connect(function()
 				if not ul.Visible then tween(lbl, {TextColor3=Color3.fromRGB(150,150,150)}, 0.1) end
 			end)
@@ -987,20 +877,15 @@ function Celestra:CreateWindow(config)
 
 					local sliding = false
 					track.InputBegan:Connect(function(i)
-						if i.UserInputType == Enum.UserInputType.MouseButton1 or
-						   i.UserInputType == Enum.UserInputType.Touch then
+						if i.UserInputType == Enum.UserInputType.MouseButton1 then
 							sliding = true; applySlide(i.Position.X)
 						end
 					end)
 					UserInputService.InputEnded:Connect(function(i)
-						if i.UserInputType == Enum.UserInputType.MouseButton1 or
-						   i.UserInputType == Enum.UserInputType.Touch then
-							sliding = false
-						end
+						if i.UserInputType == Enum.UserInputType.MouseButton1 then sliding = false end
 					end)
 					UserInputService.InputChanged:Connect(function(i)
-						if sliding and (i.UserInputType == Enum.UserInputType.MouseMovement or
-						                i.UserInputType == Enum.UserInputType.Touch) then
+						if sliding and i.UserInputType == Enum.UserInputType.MouseMovement then
 							applySlide(i.Position.X)
 						end
 					end)
@@ -1494,7 +1379,7 @@ function Celestra:CreateWindow(config)
 					local function refreshMobile()
 						cbs.Color = active and Color3.fromRGB(45,110,220) or Color3.fromRGB(72,72,72)
 						cb.BackgroundColor3 = active and Color3.fromRGB(45,110,220) or Color3.fromRGB(14,14,14)
-						floatHolder.Visible = active
+						floatHolder.Visible = isMobile and active
 					end
 					refreshMobile()
 
@@ -1502,13 +1387,6 @@ function Celestra:CreateWindow(config)
 						active = not active
 						Registry[id] = active
 						refreshMobile()
-					end)
-					cb.InputEnded:Connect(function(i)
-						if i.UserInputType == Enum.UserInputType.Touch then
-							active = not active
-							Registry[id] = active
-							refreshMobile()
-						end
 					end)
 
 					-- ── Element API ──────────────────────────────────────────────────
