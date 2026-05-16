@@ -7,7 +7,18 @@ local Players         = game:GetService("Players")
 local UserInputService= game:GetService("UserInputService")
 local TweenService    = game:GetService("TweenService")
 local player          = Players.LocalPlayer
-local playerGui       = player:WaitForChild("PlayerGui")
+
+-- Always render above every in-game GUI
+local function getGuiParent()
+	if gethui then return gethui() end
+	local ok, cg = pcall(function() return game:GetService("CoreGui") end)
+	if ok and cg then
+		if syn and syn.protect_gui then end -- protect_gui called below on screenGui
+		return cg
+	end
+	return player:WaitForChild("PlayerGui")
+end
+local guiParent = getGuiParent()
 
 -- ============================================================
 -- LIBRARY TABLE
@@ -71,7 +82,9 @@ function Celestra:CreateWindow(config)
 		ZIndexBehavior = Enum.ZIndexBehavior.Global,
 		DisplayOrder = 2147483647,
 		IgnoreGuiInset = true,
-	}, playerGui)
+	}, guiParent)
+	-- protect from game detection if executor supports it
+	if syn and syn.protect_gui then pcall(syn.protect_gui, screenGui) end
 
 	-- Responsive scaling for phone / tablet / PC
 	local uiScale = Instance.new("UIScale")
@@ -464,10 +477,17 @@ function Celestra:CreateWindow(config)
 		pad.PaddingTop = UDim.new(0,14); pad.PaddingBottom = UDim.new(0,14)
 		pad.PaddingLeft = UDim.new(0,14); pad.PaddingRight = UDim.new(0,14)
 		pad.Parent = page
-		-- Use the page's own AbsoluteSize (driven by AutomaticSize) — most reliable on mobile
+		-- On mobile: set a huge canvas so scroll NEVER hits a ceiling and snaps back.
+		-- On desktop: use the real page height so the scrollbar is accurate.
+		local isTouchOnly = UserInputService.TouchEnabled and not UserInputService.MouseEnabled
 		local function refreshCanvas()
 			task.defer(function()
-				pageScroll.CanvasSize = UDim2.new(0, 0, 0, page.AbsoluteSize.Y + 40)
+				if isTouchOnly then
+					-- 999999 = effectively infinite; mobile touch can always scroll further
+					pageScroll.CanvasSize = UDim2.new(0, 0, 0, 999999)
+				else
+					pageScroll.CanvasSize = UDim2.new(0, 0, 0, page.AbsoluteSize.Y + 40)
+				end
 			end)
 		end
 		page:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
@@ -488,7 +508,12 @@ function Celestra:CreateWindow(config)
 			curPage = allPages[key]
 			pageScroll.CanvasPosition = Vector2.new(0,0)
 			task.defer(function()
-				pageScroll.CanvasSize = UDim2.new(0, 0, 0, allPages[key].AbsoluteSize.Y + 40)
+				local isTouchOnly = UserInputService.TouchEnabled and not UserInputService.MouseEnabled
+				if isTouchOnly then
+					pageScroll.CanvasSize = UDim2.new(0, 0, 0, 999999)
+				else
+					pageScroll.CanvasSize = UDim2.new(0, 0, 0, allPages[key].AbsoluteSize.Y + 40)
+				end
 			end)
 		end
 	end
