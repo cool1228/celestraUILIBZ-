@@ -1,7 +1,7 @@
 [README.md](https://github.com/user-attachments/files/27566845/README.md)
 # Celestra UI Library
 
-A clean, dark-themed Roblox UI library with smooth animations, a full element set, and a built-in SaveManager for config persistence.
+A clean, dark-themed Roblox UI library with smooth animations, a full element set, a built-in SaveManager for config persistence, and **native mobile button support**.
 
 > **Made entirely by [Claude](https://claude.ai) (Anthropic) — AI-generated Roblox UI library.**
 
@@ -23,6 +23,11 @@ A clean, dark-themed Roblox UI library with smooth animations, a full element se
 ├──────────┴──────────────────────────────────────────────────┤
 │  ● Status: Connected          ● Game: Example               │
 └─────────────────────────────────────────────────────────────┘
+
+Mobile floating button (visible when toggle is ON):
+┌──────────────┐
+│  Teleport   │  ← small, black, draggable, sharp corners
+└──────────────┘
 ```
 
 ---
@@ -86,7 +91,7 @@ card:AddToggle("myToggle", {
 
 ### Badges
 
-Badges appear in the title bar next to the window title. You can add as many as you want or remove them all.
+Badges appear in the title bar next to the window title.
 
 ```lua
 Badges = {
@@ -111,7 +116,7 @@ Window
  └── Category  (sidebar group header)
       └── Page  (sidebar nav item)
            └── Card  (content section with a header)
-                └── Elements (Toggle, Slider, Dropdown, ...)
+                └── Elements (Toggle, Slider, Dropdown, MobileButton, ...)
 ```
 
 ```lua
@@ -189,6 +194,38 @@ local elem = card:AddKeybind("uniqueId", {
 elem:GetValue()        -- returns key name string e.g. "E"
 elem:SetValue("F")     -- set programmatically
 ```
+
+---
+
+### Mobile Button
+
+Designed for mobile users who have no keyboard. Works like a Keybind row in the settings card, but instead of capturing a key it spawns a **small, black, sharp-cornered, draggable floating button** on screen. The floating button only appears when the toggle checkbox in the card is enabled. On desktop (mouse present, no touch) the floating button stays hidden automatically.
+
+```lua
+local elem = card:AddMobileButton("uniqueId", {
+    Title        = "Teleport",           -- label shown in the card row
+    Desc         = "Tap to teleport.",   -- sub-text in the card row
+    MobileTitle  = "Teleport",           -- label on the floating button (defaults to Title)
+    Default      = false,                -- starts hidden; enable checkbox to show button
+    Callback     = function()
+        -- fires every time the floating button is tapped / clicked
+        print("Mobile button tapped!")
+    end,
+})
+
+elem:GetValue()           -- returns true (button shown) / false (hidden)
+elem:SetValue(true)       -- show or hide the floating button programmatically
+elem:SetTitle("Go!")      -- update the floating button label at runtime
+```
+
+**How it works:**
+- In the settings card a checkbox row appears (identical look to a Toggle).
+- When the checkbox is **OFF** the floating button is invisible — clean screen for desktop or when the feature is disabled.
+- When the checkbox is **ON** (and the device has touch/no mouse) a compact draggable button appears anywhere on screen.
+- The user can drag it anywhere out of the way.
+- Tapping/clicking it fires the `Callback`.
+
+**Device detection** is automatic — `UserInputService.TouchEnabled and not UserInputService.MouseEnabled`. No manual platform check needed.
 
 ---
 
@@ -322,7 +359,7 @@ Window:Destroy()                                     -- remove the UI entirely
 
 ## Full Example
 
-See [`Example.lua`](Example.lua) in this repository for a complete working script that demonstrates every element type.
+See [`example.txt`](example.txt) in this repository for a complete working script that demonstrates every element type including the new Mobile Button.
 
 ---
 
@@ -334,7 +371,7 @@ See [`Example.lua`](Example.lua) in this repository for a complete working scrip
 | **SaveManager** | Built entirely by [Claude](https://claude.ai) (Anthropic AI) |
 | **Repository** | [cool1228](https://github.com/cool1228) |
 
-> Celestra was designed and coded from scratch by Claude (claude.ai), Anthropic's AI assistant, across an iterative development session covering layout, scrolling, input handling, animations, and the config system.
+> Celestra was designed and coded from scratch by Claude (claude.ai), Anthropic's AI assistant, across an iterative development session covering layout, scrolling, input handling, animations, the config system, and mobile button support.
 
 ---
 
