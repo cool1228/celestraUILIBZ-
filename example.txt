@@ -1,7 +1,8 @@
 -- ============================================================
 -- Celestra UI Library — Full Example Script
 -- Shows every available element: Toggle, Slider, Dropdown,
--- Keybind, Button, TextInput, ColorPicker, Label, Divider
+-- Keybind, MobileButton, Button, TextInput, ColorPicker,
+-- Label, Divider
 -- ============================================================
 
 -- Load Celestra
@@ -16,23 +17,18 @@ local SaveManager = loadstring(game:HttpGet(
 
 -- ============================================================
 -- CREATE WINDOW
--- Badges support three types:
---   "accent"  → blue  (e.g. BETA, NEW)
---   "danger"  → red   (e.g. PAID, ADMIN)
---   "default" → grey  (e.g. version numbers)
--- You can add as many badges as you like, or remove them all.
 -- ============================================================
 local Window = Celestra:CreateWindow({
-    Title       = "Celestra",        -- Window title text
+    Title       = "Mobile Button GUI Example",  -- <-- title updated
     Width       = 850,
     Height      = 540,
     ToggleKey   = Enum.KeyCode.RightShift,
     Status      = "Status: Connected",
     StatusRight = "Game: Example",
     Badges      = {
-        { text = "BETA",   type = "accent"  },  -- blue badge
-        { text = "PAID",   type = "default"  },  -- red badge  — remove this line if not needed
-        { text = "v0.1.0", type = "default" },  -- grey badge — change text to any version string
+        { text = "BETA",   type = "accent"  },
+        { text = "PAID",   type = "default" },
+        { text = "v0.1.0", type = "default" },
     },
 })
 
@@ -133,7 +129,7 @@ local dd2 = dropCard:AddDropdown("dd_bone", {
     end,
 })
 
-local dd3 = dropCard:AddDropdown("dd_theme", {
+local dd3 = dropCard:AddDropdown("dd_prediction", {
     Title    = "Prediction",
     Desc     = "Bullet-drop prediction mode.",
     Options  = { "Off", "Low", "Medium", "High" },
@@ -164,7 +160,58 @@ local kb2 = keybindCard:AddKeybind("kb_esp", {
     end,
 })
 
--- ── Card 5: Color Pickers ───────────────────────────────────
+-- ── Card 5: Mobile Buttons ──────────────────────────────────
+-- On MOBILE: enabling the checkbox makes a small black draggable
+-- button appear on screen. Tapping it fires the callback.
+-- On DESKTOP: the floating button is automatically hidden;
+-- only the card row is visible (for config purposes).
+local mobileCard = examplePage:AddCard("Mobile Buttons")
+
+-- Mobile button — Teleport to spawn
+local mb1 = mobileCard:AddMobileButton("mb_teleport", {
+    Title       = "Teleport Button",
+    Desc        = "Enable to show a tap-to-teleport button on screen.",
+    MobileTitle = "Teleport",     -- text shown on the floating button
+    Default     = false,          -- starts OFF; user enables to reveal button
+    Callback    = function()
+        -- fires when the floating button is tapped
+        local char = game.Players.LocalPlayer.Character
+        if char then
+            char:MoveTo(Vector3.new(0, 5, 0))
+            print("Teleported to spawn!")
+        end
+    end,
+})
+
+-- Mobile button — Reset character
+local mb2 = mobileCard:AddMobileButton("mb_reset", {
+    Title       = "Reset Button",
+    Desc        = "Enable to show a tap-to-reset button on screen.",
+    MobileTitle = "Reset",
+    Default     = false,
+    Callback    = function()
+        local hum = game.Players.LocalPlayer.Character
+            and game.Players.LocalPlayer.Character:FindFirstChild("Humanoid")
+        if hum then
+            hum.Health = 0
+            print("Character reset!")
+        end
+    end,
+})
+
+-- Mobile button — Rejoin server
+local mb3 = mobileCard:AddMobileButton("mb_rejoin", {
+    Title       = "Rejoin Button",
+    Desc        = "Enable to show a tap-to-rejoin button on screen.",
+    MobileTitle = "Rejoin",
+    Default     = false,
+    Callback    = function()
+        local tp = game:GetService("TeleportService")
+        tp:Teleport(game.PlaceId, game.Players.LocalPlayer)
+    end,
+})
+
+-- ── Card 6: Color Pickers ───────────────────────────────────
 local colorCard = examplePage:AddCard("Color Pickers")
 
 local cp1 = colorCard:AddColorPicker("cp_esp_color", {
@@ -194,7 +241,7 @@ local cp3 = colorCard:AddColorPicker("cp_tracers", {
     end,
 })
 
--- ── Card 6: Text Inputs ─────────────────────────────────────
+-- ── Card 7: Text Inputs ─────────────────────────────────────
 local inputCard = examplePage:AddCard("Text Inputs")
 
 local ti1 = inputCard:AddTextInput("ti_username", {
@@ -217,7 +264,7 @@ local ti2 = inputCard:AddTextInput("ti_prefix", {
     end,
 })
 
--- ── Card 7: Buttons ─────────────────────────────────────────
+-- ── Card 8: Buttons ─────────────────────────────────────────
 local buttonCard = examplePage:AddCard("Buttons")
 
 buttonCard:AddButton("btn_teleport", {
@@ -256,7 +303,7 @@ buttonCard:AddButton("btn_reset", {
     end,
 })
 
--- ── Card 8: Labels ──────────────────────────────────────────
+-- ── Card 9: Labels ──────────────────────────────────────────
 local labelCard = examplePage:AddCard("Labels")
 
 local lbl1 = labelCard:AddLabel({
