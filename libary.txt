@@ -69,6 +69,8 @@ function Celestra:CreateWindow(config)
 		Name = "CelestraLib",
 		ResetOnSpawn = false,
 		ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+		DisplayOrder = 9999,
+		IgnoreGuiInset = false,
 	}, playerGui)
 
 	-- Responsive scaling for phone / tablet / PC
@@ -125,7 +127,8 @@ function Celestra:CreateWindow(config)
 	-- Drag logic
 	local dragging, dragStart, startPos, dragInput
 	local function updateDrag(input)
-		local d = input.Position - dragStart
+		local scale = uiScale.Scale > 0 and uiScale.Scale or 1
+		local d = (input.Position - dragStart) / scale
 		local np = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
 		window.Position = np
 		glowHolder.Position = np
@@ -461,9 +464,15 @@ function Celestra:CreateWindow(config)
 		pad.PaddingLeft = UDim.new(0,14); pad.PaddingRight = UDim.new(0,14)
 		pad.Parent = page
 		-- Keep canvas size in sync whenever THIS page is the active one
+		local function refreshCanvas()
+			pageScroll.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y + 28 + 80)
+		end
 		layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+			if page.Visible then refreshCanvas() end
+		end)
+		page:GetPropertyChangedSignal("Visible"):Connect(function()
 			if page.Visible then
-				pageScroll.CanvasSize = UDim2.new(0,0,0,layout.AbsoluteContentSize.Y + 60)
+				task.defer(refreshCanvas)  -- defer so layout has settled
 			end
 		end)
 		allPages[key] = page
@@ -480,7 +489,7 @@ function Celestra:CreateWindow(config)
 			-- Update canvas size for the newly shown page
 			local layout = pageLayouts[key]
 			if layout then
-				pageScroll.CanvasSize = UDim2.new(0,0,0,layout.AbsoluteContentSize.Y + 60)
+				pageScroll.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y + 28 + 80)
 			end
 		end
 	end
