@@ -90,13 +90,16 @@ function Celestra:CreateWindow(config)
 	local uiScale = Instance.new("UIScale")
 	uiScale.Parent = screenGui
 	local BASE_W = 1920
+	local isTouchOnly = UserInputService.TouchEnabled and not UserInputService.MouseEnabled
 	local function applyScale()
 		local vp = workspace.CurrentCamera.ViewportSize
 		local shortSide = math.min(vp.X, vp.Y)
 		local longSide  = math.max(vp.X, vp.Y)
 		local scaleByWidth  = longSide  / BASE_W
 		local scaleByHeight = shortSide / (h + 20)
-		uiScale.Scale = math.min(scaleByWidth, scaleByHeight, 1)
+		local base = math.min(scaleByWidth, scaleByHeight, 1)
+		-- Mobile gets a 1.35x boost so the GUI is comfortably readable
+		uiScale.Scale = isTouchOnly and math.min(base * 1.35, 1) or base
 	end
 	applyScale()
 	workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(applyScale)
@@ -760,8 +763,13 @@ function Celestra:CreateWindow(config)
 					local on = opts.Default or false
 					Registry[id] = on
 
+					local rowH   = isTouchOnly and 64 or 52
+					local cbSize = isTouchOnly and 30 or 22
+					local cbOff  = isTouchOnly and -(cbSize/2+2) or -11
+					local cbPos  = isTouchOnly and -(cbSize+10) or -36
+
 					local row = new("Frame", {
-						Size = UDim2.new(1,0,0,52),
+						Size = UDim2.new(1,0,0,rowH),
 						BackgroundTransparency = 1,
 						BorderSizePixel = 0,
 						LayoutOrder = self._rowOrder,
@@ -769,12 +777,12 @@ function Celestra:CreateWindow(config)
 					}, card)
 
 					new("TextLabel", {
-						Size = UDim2.new(1,-56,0,20),
-						Position = UDim2.new(0,16,0,8),
+						Size = UDim2.new(1,-56,0, isTouchOnly and 24 or 20),
+						Position = UDim2.new(0,16,0, isTouchOnly and 9 or 8),
 						BackgroundTransparency = 1,
 						Text = opts.Title or id,
 						TextColor3 = Color3.fromRGB(215,215,215),
-						TextSize = 13,
+						TextSize = isTouchOnly and 15 or 13,
 						Font = Enum.Font.GothamBold,
 						TextXAlignment = Enum.TextXAlignment.Left,
 						ZIndex = 2,
@@ -782,26 +790,26 @@ function Celestra:CreateWindow(config)
 
 					new("TextLabel", {
 						Size = UDim2.new(1,-56,0,15),
-						Position = UDim2.new(0,16,0,30),
+						Position = UDim2.new(0,16,0, isTouchOnly and 36 or 30),
 						BackgroundTransparency = 1,
 						Text = opts.Desc or "",
 						TextColor3 = Color3.fromRGB(72,72,72),
-						TextSize = 11,
+						TextSize = isTouchOnly and 12 or 11,
 						Font = Enum.Font.Gotham,
 						TextXAlignment = Enum.TextXAlignment.Left,
 						ZIndex = 2,
 					}, row)
 
 					local cb = new("TextButton", {
-						Size = UDim2.new(0,22,0,22),
-						Position = UDim2.new(1,-36,0.5,-11),
+						Size = UDim2.new(0,cbSize,0,cbSize),
+						Position = UDim2.new(1,cbPos,0.5,cbOff),
 						BackgroundColor3 = Color3.fromRGB(14,14,14),
 						BorderSizePixel = 0,
 						Text = "",
 						ZIndex = 3,
 					}, row)
 					local cbs = stroke(cb, Color3.fromRGB(72,72,72), 1.5)
-					corner(cb, 3)
+					corner(cb, isTouchOnly and 5 or 3)
 
 					local function refresh()
 						cbs.Color = on and Color3.fromRGB(45,110,220) or Color3.fromRGB(72,72,72)
@@ -815,6 +823,21 @@ function Celestra:CreateWindow(config)
 						refresh()
 						if opts.Callback then opts.Callback(on) end
 					end)
+					-- Touch tap on the whole row also toggles (bigger hit area on mobile)
+					if isTouchOnly then
+						local tapStartPos
+						row.InputBegan:Connect(function(i)
+							if i.UserInputType == Enum.UserInputType.Touch then tapStartPos = i.Position end
+						end)
+						row.InputEnded:Connect(function(i)
+							if i.UserInputType == Enum.UserInputType.Touch and tapStartPos then
+								if (i.Position - tapStartPos).Magnitude < 14 then
+									on = not on; Registry[id] = on; refresh()
+									if opts.Callback then opts.Callback(on) end
+								end
+							end
+						end)
+					end
 
 					local elem = {}
 					function elem:GetValue() return Registry[id] end
@@ -832,8 +855,13 @@ function Celestra:CreateWindow(config)
 					local val  = opts.Default or minV
 					Registry[id] = val
 
+					local sliderRowH   = isTouchOnly and 72 or 58
+					local trackH       = isTouchOnly and 6  or 3
+					local trackYPos    = isTouchOnly and 54 or 46
+					local capW         = isTouchOnly and 6  or 3
+
 					local row = new("Frame", {
-						Size = UDim2.new(1,0,0,58),
+						Size = UDim2.new(1,0,0,sliderRowH),
 						BackgroundTransparency = 1,
 						BorderSizePixel = 0,
 						LayoutOrder = self._rowOrder,
@@ -841,12 +869,12 @@ function Celestra:CreateWindow(config)
 					}, card)
 
 					new("TextLabel", {
-						Size = UDim2.new(0.55,0,0,18),
-						Position = UDim2.new(0,16,0,7),
+						Size = UDim2.new(0.55,0,0, isTouchOnly and 22 or 18),
+						Position = UDim2.new(0,16,0, isTouchOnly and 8 or 7),
 						BackgroundTransparency = 1,
 						Text = opts.Title or id,
 						TextColor3 = Color3.fromRGB(215,215,215),
-						TextSize = 13,
+						TextSize = isTouchOnly and 15 or 13,
 						Font = Enum.Font.GothamBold,
 						TextXAlignment = Enum.TextXAlignment.Left,
 						ZIndex = 2,
@@ -854,19 +882,19 @@ function Celestra:CreateWindow(config)
 
 					new("TextLabel", {
 						Size = UDim2.new(0.6,0,0,14),
-						Position = UDim2.new(0,16,0,27),
+						Position = UDim2.new(0,16,0, isTouchOnly and 32 or 27),
 						BackgroundTransparency = 1,
 						Text = opts.Desc or "",
 						TextColor3 = Color3.fromRGB(72,72,72),
-						TextSize = 11,
+						TextSize = isTouchOnly and 12 or 11,
 						Font = Enum.Font.Gotham,
 						TextXAlignment = Enum.TextXAlignment.Left,
 						ZIndex = 2,
 					}, row)
 
 					local valBadge = new("Frame", {
-						Size = UDim2.new(0,38,0,18),
-						Position = UDim2.new(1,-54,0,8),
+						Size = UDim2.new(0, isTouchOnly and 46 or 38, 0, isTouchOnly and 22 or 18),
+						Position = UDim2.new(1, isTouchOnly and -62 or -54, 0, 8),
 						BackgroundColor3 = Color3.fromRGB(22,22,22),
 						BorderSizePixel = 0,
 						ZIndex = 3,
@@ -879,14 +907,14 @@ function Celestra:CreateWindow(config)
 						BackgroundTransparency = 1,
 						Text = tostring(val),
 						TextColor3 = Color3.fromRGB(140,140,140),
-						TextSize = 11,
+						TextSize = isTouchOnly and 13 or 11,
 						Font = Enum.Font.GothamBold,
 						ZIndex = 4,
 					}, valBadge)
 
 					local track = new("Frame", {
-						Size = UDim2.new(1,-32,0,3),
-						Position = UDim2.new(0,16,0,46),
+						Size = UDim2.new(1,-32,0,trackH),
+						Position = UDim2.new(0,16,0,trackYPos),
 						BackgroundColor3 = Color3.fromRGB(30,30,30),
 						BorderSizePixel = 0,
 						ZIndex = 3,
@@ -903,7 +931,7 @@ function Celestra:CreateWindow(config)
 					corner(fill, 999)
 
 					local cap = new("Frame", {
-						Size = UDim2.new(0,3,1,0),
+						Size = UDim2.new(0,capW,1,0),
 						AnchorPoint = Vector2.new(0.5,0),
 						Position = UDim2.new(pct0,0,0,0),
 						BackgroundColor3 = Color3.fromRGB(100,165,255),
@@ -911,6 +939,15 @@ function Celestra:CreateWindow(config)
 						ZIndex = 5,
 					}, track)
 					corner(cap, 999)
+
+					-- Invisible tall hitbox over the track for easy finger targeting on mobile
+					local hitbox = new("TextButton", {
+						Size = UDim2.new(1,0,0, isTouchOnly and 44 or trackH),
+						Position = UDim2.new(0,0,0.5, isTouchOnly and -22 or 0),
+						BackgroundTransparency = 1,
+						Text = "",
+						ZIndex = 6,
+					}, track)
 
 					local function applySlide(x)
 						local rel = math.clamp((x - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1)
@@ -924,7 +961,8 @@ function Celestra:CreateWindow(config)
 					end
 
 					local sliding = false
-					track.InputBegan:Connect(function(i)
+					-- Mouse support
+					hitbox.InputBegan:Connect(function(i)
 						if i.UserInputType == Enum.UserInputType.MouseButton1 then
 							sliding = true; applySlide(i.Position.X)
 						end
@@ -934,6 +972,20 @@ function Celestra:CreateWindow(config)
 					end)
 					UserInputService.InputChanged:Connect(function(i)
 						if sliding and i.UserInputType == Enum.UserInputType.MouseMovement then
+							applySlide(i.Position.X)
+						end
+					end)
+					-- Touch support
+					hitbox.InputBegan:Connect(function(i)
+						if i.UserInputType == Enum.UserInputType.Touch then
+							sliding = true; applySlide(i.Position.X)
+						end
+					end)
+					UserInputService.InputEnded:Connect(function(i)
+						if i.UserInputType == Enum.UserInputType.Touch then sliding = false end
+					end)
+					UserInputService.InputChanged:Connect(function(i)
+						if sliding and i.UserInputType == Enum.UserInputType.Touch then
 							applySlide(i.Position.X)
 						end
 					end)
@@ -1371,21 +1423,23 @@ function Celestra:CreateWindow(config)
 						ZIndex = 502,
 					}, floatBtn)
 
-					-- ── Drag logic for floatHolder ──────────────────────────────────
+					-- ── Drag logic for floatHolder (mobile-accurate) ────────────────
 					local fDragging, fDragStart, fStartPos = false, nil, nil
 
 					floatBtn.InputBegan:Connect(function(i)
 						if i.UserInputType == Enum.UserInputType.Touch or
 						   i.UserInputType == Enum.UserInputType.MouseButton1 then
-							fDragging = true
-							fDragStart = i.Position
+							fDragging  = true
+							fDragStart = Vector2.new(i.Position.X, i.Position.Y)
 							fStartPos  = floatHolder.Position
 						end
 					end)
+					-- Track on UIS so we never lose the event even if finger drifts off button
 					UserInputService.InputChanged:Connect(function(i)
 						if fDragging and (i.UserInputType == Enum.UserInputType.Touch or
 						                  i.UserInputType == Enum.UserInputType.MouseMovement) then
-							local d = i.Position - fDragStart
+							local scale = uiScale.Scale > 0 and uiScale.Scale or 1
+							local d = (Vector2.new(i.Position.X, i.Position.Y) - fDragStart) / scale
 							floatHolder.Position = UDim2.new(
 								fStartPos.X.Scale, fStartPos.X.Offset + d.X,
 								fStartPos.Y.Scale, fStartPos.Y.Offset + d.Y
@@ -1457,8 +1511,14 @@ function Celestra:CreateWindow(config)
 					opts = opts or {}
 					self._rowOrder = self._rowOrder + 1
 
+					local btnRowH  = isTouchOnly and 64 or 52
+					local btnW     = isTouchOnly and 110 or 90
+					local btnH     = isTouchOnly and 34 or 24
+					local btnXOff  = -(btnW+16)
+					local btnYOff  = -(btnH/2)
+
 					local row = new("Frame", {
-						Size = UDim2.new(1,0,0,52),
+						Size = UDim2.new(1,0,0,btnRowH),
 						BackgroundTransparency = 1,
 						BorderSizePixel = 0,
 						LayoutOrder = self._rowOrder,
@@ -1466,12 +1526,12 @@ function Celestra:CreateWindow(config)
 					}, card)
 
 					new("TextLabel", {
-						Size = UDim2.new(1,-120,0,20),
-						Position = UDim2.new(0,16,0,8),
+						Size = UDim2.new(1,-120,0, isTouchOnly and 24 or 20),
+						Position = UDim2.new(0,16,0, isTouchOnly and 9 or 8),
 						BackgroundTransparency = 1,
 						Text = opts.Title or id,
 						TextColor3 = Color3.fromRGB(215,215,215),
-						TextSize = 13,
+						TextSize = isTouchOnly and 15 or 13,
 						Font = Enum.Font.GothamBold,
 						TextXAlignment = Enum.TextXAlignment.Left,
 						ZIndex = 2,
@@ -1479,11 +1539,11 @@ function Celestra:CreateWindow(config)
 
 					new("TextLabel", {
 						Size = UDim2.new(1,-120,0,15),
-						Position = UDim2.new(0,16,0,30),
+						Position = UDim2.new(0,16,0, isTouchOnly and 36 or 30),
 						BackgroundTransparency = 1,
 						Text = opts.Desc or "",
 						TextColor3 = Color3.fromRGB(72,72,72),
-						TextSize = 11,
+						TextSize = isTouchOnly and 12 or 11,
 						Font = Enum.Font.Gotham,
 						TextXAlignment = Enum.TextXAlignment.Left,
 						ZIndex = 2,
@@ -1491,13 +1551,13 @@ function Celestra:CreateWindow(config)
 
 					local isDanger = opts.Danger == true
 					local btn = new("TextButton", {
-						Size = UDim2.new(0,90,0,24),
-						Position = UDim2.new(1,-106,0.5,-12),
+						Size = UDim2.new(0,btnW,0,btnH),
+						Position = UDim2.new(1,btnXOff,0.5,btnYOff),
 						BackgroundColor3 = Color3.fromRGB(22,22,22),
 						BorderSizePixel = 0,
 						Text = opts.ButtonText or "Execute",
 						TextColor3 = isDanger and Color3.fromRGB(210,100,100) or Color3.fromRGB(210,210,210),
-						TextSize = 11,
+						TextSize = isTouchOnly and 13 or 11,
 						Font = Enum.Font.GothamBold,
 						ZIndex = 3,
 					}, row)
@@ -1521,6 +1581,24 @@ function Celestra:CreateWindow(config)
 						tween(btn, {BackgroundColor3=Color3.fromRGB(28,28,28)}, 0.06)
 						if opts.Callback then opts.Callback() end
 					end)
+					-- Touch tap fires callback too
+					if isTouchOnly then
+						local tapStart2
+						btn.InputBegan:Connect(function(i)
+							if i.UserInputType == Enum.UserInputType.Touch then
+								tapStart2 = i.Position
+								tween(btn, {BackgroundColor3=Color3.fromRGB(32,32,32)}, 0.06)
+							end
+						end)
+						btn.InputEnded:Connect(function(i)
+							if i.UserInputType == Enum.UserInputType.Touch and tapStart2 then
+								tween(btn, {BackgroundColor3=Color3.fromRGB(22,22,22)}, 0.1)
+								if (i.Position - tapStart2).Magnitude < 20 then
+									if opts.Callback then opts.Callback() end
+								end
+							end
+						end)
+					end
 				end
 
 				-- ── AddLabel ──
