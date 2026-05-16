@@ -1207,6 +1207,203 @@ function Celestra:CreateWindow(config)
 					return elem
 				end
 
+				-- ── AddMobileButton ──
+				-- Creates a row in the card (like a keybind) AND spawns a small draggable
+				-- on-screen button for mobile users. On desktop the floating button is hidden.
+				-- opts.MobileTitle  — label shown on the floating button (defaults to opts.Title)
+				-- opts.Default      — initial active state (boolean, default false)
+				-- When the toggle inside the card is OFF the floating button is hidden.
+				-- When it is ON the floating button appears and its tap fires opts.Callback.
+				function Card:AddMobileButton(id, opts)
+					opts = opts or {}
+					self._rowOrder = self._rowOrder + 1
+					local active = opts.Default or false
+					Registry[id] = active
+
+					-- ── Card row (looks like a toggle) ──────────────────────────────
+					local row = new("Frame", {
+						Size = UDim2.new(1,0,0,52),
+						BackgroundTransparency = 1,
+						BorderSizePixel = 0,
+						LayoutOrder = self._rowOrder,
+						ZIndex = 2,
+					}, card)
+
+					new("TextLabel", {
+						Size = UDim2.new(1,-56,0,20),
+						Position = UDim2.new(0,16,0,8),
+						BackgroundTransparency = 1,
+						Text = opts.Title or id,
+						TextColor3 = Color3.fromRGB(215,215,215),
+						TextSize = 13,
+						Font = Enum.Font.GothamBold,
+						TextXAlignment = Enum.TextXAlignment.Left,
+						ZIndex = 2,
+					}, row)
+
+					new("TextLabel", {
+						Size = UDim2.new(1,-56,0,15),
+						Position = UDim2.new(0,16,0,30),
+						BackgroundTransparency = 1,
+						Text = opts.Desc or "Tap the floating button on screen.",
+						TextColor3 = Color3.fromRGB(72,72,72),
+						TextSize = 11,
+						Font = Enum.Font.Gotham,
+						TextXAlignment = Enum.TextXAlignment.Left,
+						ZIndex = 2,
+					}, row)
+
+					-- Toggle checkbox (same style as AddToggle)
+					local cb = new("TextButton", {
+						Size = UDim2.new(0,22,0,22),
+						Position = UDim2.new(1,-36,0.5,-11),
+						BackgroundColor3 = Color3.fromRGB(14,14,14),
+						BorderSizePixel = 0,
+						Text = "",
+						ZIndex = 3,
+					}, row)
+					local cbs = stroke(cb, Color3.fromRGB(72,72,72), 1.5)
+					corner(cb, 3)
+
+					-- ── Floating mobile button ──────────────────────────────────────
+					local isMobile = UserInputService.TouchEnabled and not UserInputService.MouseEnabled
+
+					local btnTitle = opts.MobileTitle or opts.Title or id
+
+					-- Outer container (for glow + button, draggable as a unit)
+					local floatHolder = new("Frame", {
+						Name = "MobileBtn_" .. id,
+						Size = UDim2.new(0, 0, 0, 0),        -- sized by contents via AutomaticSize
+						AutomaticSize = Enum.AutomaticSize.XY,
+						Position = UDim2.new(0, 24, 1, -110), -- default: bottom-left area
+						BackgroundTransparency = 1,
+						BorderSizePixel = 0,
+						ZIndex = 500,
+						Visible = isMobile and active,
+					}, screenGui)
+
+					-- Subtle shadow / glow behind button
+					local floatGlow = new("Frame", {
+						Size = UDim2.new(1, 8, 1, 8),
+						Position = UDim2.new(0,-4,0,-4),
+						BackgroundColor3 = Color3.fromRGB(0,0,0),
+						BackgroundTransparency = 0.55,
+						BorderSizePixel = 0,
+						ZIndex = 499,
+					}, floatHolder)
+					corner(floatGlow, 8)
+
+					-- The actual button
+					local floatBtn = new("TextButton", {
+						Size = UDim2.new(0, 0, 0, 36),        -- width = AutomaticSize X
+						AutomaticSize = Enum.AutomaticSize.X,
+						BackgroundColor3 = Color3.fromRGB(10,10,10),
+						BorderSizePixel = 0,
+						Text = "",
+						ZIndex = 501,
+					}, floatHolder)
+					corner(floatBtn, 4)
+					stroke(floatBtn, Color3.fromRGB(38,38,38), 1)
+
+					-- Inner padding
+					local fp = Instance.new("UIPadding")
+					fp.PaddingLeft  = UDim.new(0,12)
+					fp.PaddingRight = UDim.new(0,12)
+					fp.Parent = floatBtn
+
+					-- Label inside float button
+					local floatLbl = new("TextLabel", {
+						Size = UDim2.new(0,0,1,0),
+						AutomaticSize = Enum.AutomaticSize.X,
+						BackgroundTransparency = 1,
+						Text = btnTitle,
+						TextColor3 = Color3.fromRGB(200,200,200),
+						TextSize = 13,
+						Font = Enum.Font.GothamBold,
+						ZIndex = 502,
+					}, floatBtn)
+
+					-- ── Drag logic for floatHolder ──────────────────────────────────
+					local fDragging, fDragStart, fStartPos = false, nil, nil
+
+					floatBtn.InputBegan:Connect(function(i)
+						if i.UserInputType == Enum.UserInputType.Touch or
+						   i.UserInputType == Enum.UserInputType.MouseButton1 then
+							fDragging = true
+							fDragStart = i.Position
+							fStartPos  = floatHolder.Position
+						end
+					end)
+					UserInputService.InputChanged:Connect(function(i)
+						if fDragging and (i.UserInputType == Enum.UserInputType.Touch or
+						                  i.UserInputType == Enum.UserInputType.MouseMovement) then
+							local d = i.Position - fDragStart
+							floatHolder.Position = UDim2.new(
+								fStartPos.X.Scale, fStartPos.X.Offset + d.X,
+								fStartPos.Y.Scale, fStartPos.Y.Offset + d.Y
+							)
+						end
+					end)
+					UserInputService.InputEnded:Connect(function(i)
+						if i.UserInputType == Enum.UserInputType.Touch or
+						   i.UserInputType == Enum.UserInputType.MouseButton1 then
+							fDragging = false
+						end
+					end)
+
+					-- Tap fires callback (only if not a drag)
+					local tapStart = Vector2.new(0,0)
+					floatBtn.InputBegan:Connect(function(i)
+						if i.UserInputType == Enum.UserInputType.Touch then
+							tapStart = i.Position
+						end
+					end)
+					floatBtn.InputEnded:Connect(function(i)
+						if i.UserInputType == Enum.UserInputType.Touch then
+							local dist = (i.Position - tapStart).Magnitude
+							if dist < 12 then
+								-- press flash
+								tween(floatBtn, {BackgroundColor3=Color3.fromRGB(30,30,30)}, 0.06)
+								task.delay(0.1, function()
+									tween(floatBtn, {BackgroundColor3=Color3.fromRGB(10,10,10)}, 0.1)
+								end)
+								if opts.Callback then opts.Callback() end
+							end
+						end
+					end)
+					floatBtn.MouseButton1Click:Connect(function()
+						if opts.Callback then opts.Callback() end
+					end)
+
+					-- ── Toggle checkbox controls float button visibility ─────────────
+					local function refreshMobile()
+						cbs.Color = active and Color3.fromRGB(45,110,220) or Color3.fromRGB(72,72,72)
+						cb.BackgroundColor3 = active and Color3.fromRGB(45,110,220) or Color3.fromRGB(14,14,14)
+						floatHolder.Visible = isMobile and active
+					end
+					refreshMobile()
+
+					cb.MouseButton1Click:Connect(function()
+						active = not active
+						Registry[id] = active
+						refreshMobile()
+					end)
+
+					-- ── Element API ──────────────────────────────────────────────────
+					local elem = {}
+					function elem:GetValue() return Registry[id] end
+					function elem:SetValue(v)
+						active = v
+						Registry[id] = v
+						refreshMobile()
+					end
+					function elem:SetTitle(t)
+						floatLbl.Text = t
+					end
+					Elements[id] = elem
+					return elem
+				end
+
 				-- ── AddButton ──
 				function Card:AddButton(id, opts)
 					opts = opts or {}
