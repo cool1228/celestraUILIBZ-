@@ -147,9 +147,10 @@ function Celestra:CreateWindow(config)
 		ZIndex = 3,
 	}, titleBar)
 
-	-- Drag on title bar
+	-- Drag on title bar (Mouse + Touch)
 	titleBar.InputBegan:Connect(function(i)
-		if i.UserInputType == Enum.UserInputType.MouseButton1 then
+		if i.UserInputType == Enum.UserInputType.MouseButton1 or
+		   i.UserInputType == Enum.UserInputType.Touch then
 			dragging = true
 			dragStart = i.Position
 			startPos = window.Position
@@ -159,7 +160,10 @@ function Celestra:CreateWindow(config)
 		end
 	end)
 	titleBar.InputChanged:Connect(function(i)
-		if i.UserInputType == Enum.UserInputType.MouseMovement then dragInput = i end
+		if i.UserInputType == Enum.UserInputType.MouseMovement or
+		   i.UserInputType == Enum.UserInputType.Touch then
+			dragInput = i
+		end
 	end)
 	UserInputService.InputChanged:Connect(function(i)
 		if i == dragInput and dragging then updateDrag(i) end
@@ -315,32 +319,43 @@ function Celestra:CreateWindow(config)
 		ElasticBehavior = Enum.ElasticBehavior.Always,
 		CanvasSize = UDim2.new(0,0,0,0),
 		ClipsDescendants = true,
+		Active = true,
 		ZIndex = 2,
 	}, contentArea)
 
 	-- Smooth scroll with accumulated target and camera zoom sink
 	local scrollTargets = {}
 	local hoveredFrames = {}
+	local isTouchDevice = UserInputService.TouchEnabled and not UserInputService.MouseEnabled
 	local function hookSlowScroll(frame)
 		scrollTargets[frame] = 0
 		frame.MouseEnter:Connect(function() hoveredFrames[frame] = true end)
 		frame.MouseLeave:Connect(function() hoveredFrames[frame] = false end)
-		frame.InputChanged:Connect(function(input)
-			if input.UserInputType == Enum.UserInputType.MouseWheel then
-				local maxY = math.max(0, frame.AbsoluteCanvasSize.Y - frame.AbsoluteSize.Y)
-				local target = math.clamp(scrollTargets[frame] + (-input.Position.Z * 50), 0, maxY)
-				scrollTargets[frame] = target
-				tween(frame, {CanvasPosition = Vector2.new(0, target)}, 0.25)
-			end
-		end)
-		frame:GetPropertyChangedSignal("CanvasPosition"):Connect(function()
-			if scrollTargets[frame] then
-				local cy = frame.CanvasPosition.Y
-				if math.abs(cy - scrollTargets[frame]) > 2 then
-					scrollTargets[frame] = cy
+		if not isTouchDevice then
+			-- Desktop: smooth mouse-wheel scroll
+			frame.InputChanged:Connect(function(input)
+				if input.UserInputType == Enum.UserInputType.MouseWheel then
+					local maxY = math.max(0, frame.AbsoluteCanvasSize.Y - frame.AbsoluteSize.Y)
+					local target = math.clamp(scrollTargets[frame] + (-input.Position.Z * 50), 0, maxY)
+					scrollTargets[frame] = target
+					tween(frame, {CanvasPosition = Vector2.new(0, target)}, 0.25)
 				end
-			end
-		end)
+			end)
+			frame:GetPropertyChangedSignal("CanvasPosition"):Connect(function()
+				if scrollTargets[frame] then
+					local cy = frame.CanvasPosition.Y
+					if math.abs(cy - scrollTargets[frame]) > 2 then
+						scrollTargets[frame] = cy
+					end
+				end
+			end)
+		end
+		-- On mobile: native touch scrolling already works; just keep target in sync
+		if isTouchDevice then
+			frame:GetPropertyChangedSignal("CanvasPosition"):Connect(function()
+				scrollTargets[frame] = frame.CanvasPosition.Y
+			end)
+		end
 	end
 	hookSlowScroll(pageScroll)
 	hookSlowScroll(sbScroll)
@@ -448,7 +463,7 @@ function Celestra:CreateWindow(config)
 		-- Keep canvas size in sync whenever THIS page is the active one
 		layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
 			if page.Visible then
-				pageScroll.CanvasSize = UDim2.new(0,0,0,layout.AbsoluteContentSize.Y + 28)
+				pageScroll.CanvasSize = UDim2.new(0,0,0,layout.AbsoluteContentSize.Y + 60)
 			end
 		end)
 		allPages[key] = page
@@ -465,7 +480,7 @@ function Celestra:CreateWindow(config)
 			-- Update canvas size for the newly shown page
 			local layout = pageLayouts[key]
 			if layout then
-				pageScroll.CanvasSize = UDim2.new(0,0,0,layout.AbsoluteContentSize.Y + 28)
+				pageScroll.CanvasSize = UDim2.new(0,0,0,layout.AbsoluteContentSize.Y + 60)
 			end
 		end
 	end
