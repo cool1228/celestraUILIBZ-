@@ -1,14 +1,13 @@
 -- ============================================================
--- Celestra UI Library v0.1.1
--- Fixes: mobile drag, mobile scroll, mobile size, mobile tabs,
---        minimize circle button, touch support throughout
+-- Celestra UI Library v0.1.0
+-- Usage: local Celestra = loadstring(...)()
 -- ============================================================
 
-local Players          = game:GetService("Players")
-local UserInputService = game:GetService("UserInputService")
-local TweenService     = game:GetService("TweenService")
-local player           = Players.LocalPlayer
-local playerGui        = player:WaitForChild("PlayerGui")
+local Players         = game:GetService("Players")
+local UserInputService= game:GetService("UserInputService")
+local TweenService    = game:GetService("TweenService")
+local player          = Players.LocalPlayer
+local playerGui       = player:WaitForChild("PlayerGui")
 
 -- ============================================================
 -- LIBRARY TABLE
@@ -16,15 +15,18 @@ local playerGui        = player:WaitForChild("PlayerGui")
 local Celestra = {}
 Celestra.__index = Celestra
 
-local Registry = {}
-local Elements = {}
+-- Internal state storage (keybind values, toggle values, etc.)
+local Registry = {}   -- [id] = value
+local Elements = {}   -- [id] = element object
 
 -- ============================================================
 -- UTILITY
 -- ============================================================
 local function new(class, props, parent)
 	local inst = Instance.new(class)
-	for k, v in pairs(props or {}) do inst[k] = v end
+	for k, v in pairs(props or {}) do
+		inst[k] = v
+	end
 	if parent then inst.Parent = parent end
 	return inst
 end
@@ -51,110 +53,36 @@ local function tween(inst, props, t, style, dir)
 	):Play()
 end
 
--- Touch-aware drag helper — works for both mouse and touch
--- Returns a connection cleanup function
-local function makeDraggable(handle, target, extraTarget)
-	local dragging = false
-	local dragStart, startPos
-
-	local function beginDrag(pos)
-		dragging  = true
-		dragStart = pos
-		startPos  = target.Position
-	end
-	local function moveDrag(pos)
-		if not dragging then return end
-		local d = pos - dragStart
-		local np = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X,
-		                     startPos.Y.Scale, startPos.Y.Offset + d.Y)
-		target.Position = np
-		if extraTarget then extraTarget.Position = np end
-	end
-	local function endDrag()
-		dragging = false
-	end
-
-	handle.InputBegan:Connect(function(i)
-		if i.UserInputType == Enum.UserInputType.MouseButton1 or
-		   i.UserInputType == Enum.UserInputType.Touch then
-			beginDrag(Vector2.new(i.Position.X, i.Position.Y))
-		end
-	end)
-	UserInputService.InputChanged:Connect(function(i)
-		if i.UserInputType == Enum.UserInputType.MouseMovement or
-		   i.UserInputType == Enum.UserInputType.Touch then
-			moveDrag(Vector2.new(i.Position.X, i.Position.Y))
-		end
-	end)
-	UserInputService.InputEnded:Connect(function(i)
-		if i.UserInputType == Enum.UserInputType.MouseButton1 or
-		   i.UserInputType == Enum.UserInputType.Touch then
-			endDrag()
-		end
-	end)
-end
-
--- Touch scroll helper — adds touch-drag scrolling to a ScrollingFrame
-local function addTouchScroll(sf)
-	local touching    = false
-	local touchStart  = 0
-	local canvasStart = 0
-
-	sf.InputBegan:Connect(function(i)
-		if i.UserInputType == Enum.UserInputType.Touch then
-			touching    = true
-			touchStart  = i.Position.Y
-			canvasStart = sf.CanvasPosition.Y
-		end
-	end)
-	sf.InputChanged:Connect(function(i)
-		if touching and i.UserInputType == Enum.UserInputType.Touch then
-			local delta   = touchStart - i.Position.Y
-			local maxY    = math.max(0, sf.AbsoluteCanvasSize.Y - sf.AbsoluteSize.Y)
-			local newY    = math.clamp(canvasStart + delta, 0, maxY)
-			sf.CanvasPosition = Vector2.new(0, newY)
-		end
-	end)
-	sf.InputEnded:Connect(function(i)
-		if i.UserInputType == Enum.UserInputType.Touch then
-			touching = false
-		end
-	end)
-end
-
 -- ============================================================
 -- CREATE WINDOW
 -- ============================================================
 function Celestra:CreateWindow(config)
 	config = config or {}
-	local title     = config.Title     or "Celestra"
-	local badges    = config.Badges    or {}
-	local w         = config.Width     or 850
-	local h         = config.Height    or 540
+	local title   = config.Title   or "Celestra"
+	local badges  = config.Badges  or {}
+	local w       = config.Width   or 850
+	local h       = config.Height  or 540
 	local toggleKey = config.ToggleKey or Enum.KeyCode.RightShift
-
-	-- Device detection
-	local isMobileDevice = UserInputService.TouchEnabled and not UserInputService.MouseEnabled
 
 	-- ScreenGui
 	local screenGui = new("ScreenGui", {
-		Name           = "CelestraLib",
-		ResetOnSpawn   = false,
+		Name = "CelestraLib",
+		ResetOnSpawn = false,
 		ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
 	}, playerGui)
 
-	-- Responsive scaling
+	-- Responsive scaling for phone / tablet / PC
 	local uiScale = Instance.new("UIScale")
 	uiScale.Parent = screenGui
 	local BASE_W = 1920
+	local isMobile = UserInputService.TouchEnabled and not UserInputService.MouseEnabled
 	local function applyScale()
-		local vp        = workspace.CurrentCamera.ViewportSize
+		local vp = workspace.CurrentCamera.ViewportSize
 		local shortSide = math.min(vp.X, vp.Y)
 		local longSide  = math.max(vp.X, vp.Y)
-		if isMobileDevice then
-			-- On mobile use portrait width as reference, give a little extra room
-			local mobileScale = shortSide / (w * 0.62)
-			uiScale.Scale = math.min(mobileScale, 1)
+		if isMobile then
+			-- fit the 850px-wide window into the short side of a phone screen with padding
+			uiScale.Scale = math.min(shortSide / (w + 60), 1)
 		else
 			local scaleByWidth  = longSide  / BASE_W
 			local scaleByHeight = shortSide / (h + 20)
@@ -166,107 +94,135 @@ function Celestra:CreateWindow(config)
 
 	-- Glow holder
 	local glowHolder = new("Frame", {
-		Name                  = "GlowHolder",
-		Size                  = UDim2.new(0, w, 0, h),
-		Position              = UDim2.new(0.5, -w/2, 0.5, -h/2),
-		BackgroundTransparency= 1,
-		BorderSizePixel       = 0,
-		ZIndex                = 1,
+		Name = "GlowHolder",
+		Size = UDim2.new(0, w, 0, h),
+		Position = UDim2.new(0.5, -w/2, 0.5, -h/2),
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		ZIndex = 1,
 	}, screenGui)
 
-	new("ImageLabel", {
-		Size               = UDim2.new(1, 36, 1, 36),
-		Position           = UDim2.new(0, -18, 0, -18),
+	local glowImg = new("ImageLabel", {
+		Size = UDim2.new(1, 36, 1, 36),
+		Position = UDim2.new(0, -18, 0, -18),
 		BackgroundTransparency = 1,
-		BorderSizePixel    = 0,
-		Image              = "rbxassetid://5028857084",
-		ImageColor3        = Color3.fromRGB(180, 220, 255),
-		ImageTransparency  = 0,
-		ScaleType          = Enum.ScaleType.Slice,
-		SliceCenter        = Rect.new(24, 24, 276, 276),
-		ZIndex             = 1,
+		BorderSizePixel = 0,
+		Image = "rbxassetid://5028857084",
+		ImageColor3 = Color3.fromRGB(180, 220, 255),
+		ImageTransparency = 0,
+		ScaleType = Enum.ScaleType.Slice,
+		SliceCenter = Rect.new(24, 24, 276, 276),
+		ZIndex = 1,
 	}, glowHolder)
 
 	-- Main window frame
 	local window = new("Frame", {
-		Name              = "Window",
-		Size              = UDim2.new(0, w, 0, h),
-		Position          = UDim2.new(0.5, -w/2, 0.5, -h/2),
-		BackgroundColor3  = Color3.fromRGB(12, 12, 12),
-		BorderSizePixel   = 0,
-		ClipsDescendants  = false,
-		Active            = true,
-		ZIndex            = 2,
+		Name = "Window",
+		Size = UDim2.new(0, w, 0, h),
+		Position = UDim2.new(0.5, -w/2, 0.5, -h/2),
+		BackgroundColor3 = Color3.fromRGB(12, 12, 12),
+		BorderSizePixel = 0,
+		ClipsDescendants = false,
+		Active = true,
+		ZIndex = 2,
 	}, screenGui)
 	stroke(window, Color3.fromRGB(20, 20, 20), 1)
 
+	-- Drag logic
+	local dragging, dragStart, startPos, dragInput
+	local function updateDrag(input)
+		local d = input.Position - dragStart
+		local np = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
+		window.Position = np
+		glowHolder.Position = np
+	end
+
 	-- ── Title Bar ──
 	local titleBar = new("Frame", {
-		Size             = UDim2.new(1, 0, 0, 46),
+		Size = UDim2.new(1, 0, 0, 46),
 		BackgroundColor3 = Color3.fromRGB(14, 14, 14),
-		BorderSizePixel  = 0,
-		ZIndex           = 3,
+		BorderSizePixel = 0,
+		ZIndex = 3,
 	}, window)
 
 	new("Frame", {
-		Size             = UDim2.new(1, 0, 0, 1),
-		Position         = UDim2.new(0, 0, 1, -1),
+		Size = UDim2.new(1, 0, 0, 1),
+		Position = UDim2.new(0, 0, 1, -1),
 		BackgroundColor3 = Color3.fromRGB(36, 36, 36),
-		BorderSizePixel  = 0,
-		ZIndex           = 3,
+		BorderSizePixel = 0,
+		ZIndex = 3,
 	}, titleBar)
 
-	-- Drag window by title bar (mouse + touch)
-	makeDraggable(titleBar, window, glowHolder)
+	-- Drag on title bar (mouse + touch)
+	titleBar.InputBegan:Connect(function(i)
+		if i.UserInputType == Enum.UserInputType.MouseButton1 or
+		   i.UserInputType == Enum.UserInputType.Touch then
+			dragging = true
+			dragStart = i.Position
+			startPos = window.Position
+			i.Changed:Connect(function()
+				if i.UserInputState == Enum.UserInputState.End then dragging = false end
+			end)
+		end
+	end)
+	titleBar.InputChanged:Connect(function(i)
+		if i.UserInputType == Enum.UserInputType.MouseMovement then dragInput = i end
+	end)
+	UserInputService.InputChanged:Connect(function(i)
+		if dragging and (i.UserInputType == Enum.UserInputType.MouseMovement or
+		                 i.UserInputType == Enum.UserInputType.Touch) then
+			updateDrag(i)
+		end
+	end)
 
 	-- Title label
 	new("TextLabel", {
-		Size               = UDim2.new(0, 80, 1, 0),
-		Position           = UDim2.new(0, 18, 0, 0),
+		Size = UDim2.new(0, 80, 1, 0),
+		Position = UDim2.new(0, 18, 0, 0),
 		BackgroundTransparency = 1,
-		Text               = title,
-		TextColor3         = Color3.fromRGB(248, 248, 248),
-		TextSize           = 17,
-		Font               = Enum.Font.GothamBold,
-		TextXAlignment     = Enum.TextXAlignment.Left,
-		ZIndex             = 4,
+		Text = title,
+		TextColor3 = Color3.fromRGB(248, 248, 248),
+		TextSize = 17,
+		Font = Enum.Font.GothamBold,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		ZIndex = 4,
 	}, titleBar)
 
-	-- Badges
-	local badgeX      = 108
+	-- Badges — types: "accent" (blue), "danger" (red), "default" (grey)
+	local badgeX = 108
 	local badgeFrames = {}
 	for _, b in ipairs(badges) do
 		local isAccent = b.type == "accent"
 		local isDanger = b.type == "danger"
-		local bgCol = isAccent and Color3.fromRGB(25,70,185)
-		             or isDanger and Color3.fromRGB(130,30,30)
-		             or Color3.fromRGB(18,18,18)
-		local stCol = isAccent and Color3.fromRGB(45,100,220)
-		             or isDanger and Color3.fromRGB(180,45,45)
-		             or Color3.fromRGB(42,42,42)
-		local txtCol= isAccent and Color3.fromRGB(210,230,255)
-		             or isDanger and Color3.fromRGB(255,160,160)
-		             or Color3.fromRGB(95,95,95)
+		local bgCol  = isAccent and Color3.fromRGB(25,70,185)
+		              or isDanger and Color3.fromRGB(130,30,30)
+		              or Color3.fromRGB(18,18,18)
+		local stCol  = isAccent and Color3.fromRGB(45,100,220)
+		              or isDanger and Color3.fromRGB(180,45,45)
+		              or Color3.fromRGB(42,42,42)
+		local txtCol = isAccent and Color3.fromRGB(210,230,255)
+		              or isDanger and Color3.fromRGB(255,160,160)
+		              or Color3.fromRGB(95,95,95)
 		local f = new("Frame", {
-			Size          = UDim2.new(0, 0, 0, 19),
+			Size = UDim2.new(0, 0, 0, 19),
 			AutomaticSize = Enum.AutomaticSize.X,
-			Position      = UDim2.new(0, badgeX, 0.5, -9),
+			Position = UDim2.new(0, badgeX, 0.5, -9),
 			BackgroundColor3 = bgCol,
-			BorderSizePixel  = 0,
-			ZIndex           = 4,
+			BorderSizePixel = 0,
+			ZIndex = 4,
 		}, titleBar)
 		corner(f, 3)
 		stroke(f, stCol, 1)
 		local p = Instance.new("UIPadding")
 		p.PaddingLeft = UDim.new(0,7); p.PaddingRight = UDim.new(0,7); p.Parent = f
 		new("TextLabel", {
-			Size               = UDim2.new(1,0,1,0),
+			Size = UDim2.new(1,0,1,0),
 			BackgroundTransparency = 1,
-			Text               = b.text,
-			TextColor3         = txtCol,
-			TextSize           = 10,
-			Font               = Enum.Font.GothamBold,
-			ZIndex             = 5,
+			Text = b.text,
+			TextColor3 = txtCol,
+			TextSize = 10,
+			Font = Enum.Font.GothamBold,
+			ZIndex = 5,
 		}, f)
 		table.insert(badgeFrames, f)
 		f:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
@@ -279,18 +235,18 @@ function Celestra:CreateWindow(config)
 		badgeX = badgeX + 52
 	end
 
-	-- Window control buttons (close + minimize)
+	-- Window buttons
 	local function winBtn(txt, xOff)
 		local b = new("TextButton", {
-			Size               = UDim2.new(0, 26, 0, 26),
-			Position           = UDim2.new(1, xOff, 0.5, -13),
+			Size = UDim2.new(0, 26, 0, 26),
+			Position = UDim2.new(1, xOff, 0.5, -13),
 			BackgroundTransparency = 1,
-			BorderSizePixel    = 0,
-			Text               = txt,
-			TextColor3         = Color3.fromRGB(65,65,65),
-			TextSize           = 17,
-			Font               = Enum.Font.GothamBold,
-			ZIndex             = 4,
+			BorderSizePixel = 0,
+			Text = txt,
+			TextColor3 = Color3.fromRGB(65,65,65),
+			TextSize = 17,
+			Font = Enum.Font.GothamBold,
+			ZIndex = 4,
 		}, titleBar)
 		b.MouseEnter:Connect(function() b.TextColor3 = Color3.fromRGB(210,210,210) end)
 		b.MouseLeave:Connect(function() b.TextColor3 = Color3.fromRGB(65,65,65) end)
@@ -300,151 +256,161 @@ function Celestra:CreateWindow(config)
 	local closeBtn = winBtn("×", -30)
 	local minBtn   = winBtn("−", -56)
 	closeBtn.MouseButton1Click:Connect(function() screenGui:Destroy() end)
-	-- Touch support for close
 	closeBtn.InputEnded:Connect(function(i)
 		if i.UserInputType == Enum.UserInputType.Touch then screenGui:Destroy() end
 	end)
 
-	-- ── Minimize Circle (black circle with "C", draggable, tap to restore) ──
-	local minimizeCircle = new("Frame", {
-		Name              = "MinimizeCircle",
-		Size              = UDim2.new(0, 52, 0, 52),
-		Position          = UDim2.new(0, 24, 1, -90),
-		BackgroundColor3  = Color3.fromRGB(0, 0, 0),
-		BorderSizePixel   = 0,
-		ZIndex            = 600,
-		Visible           = false,
+	-- Draggable black circle shown when minimized
+	local minCircle = new("Frame", {
+		Size = UDim2.new(0, 54, 0, 54),
+		Position = UDim2.new(0, 20, 1, -90),
+		BackgroundColor3 = Color3.fromRGB(0, 0, 0),
+		BorderSizePixel = 0,
+		ZIndex = 600,
+		Visible = false,
 	}, screenGui)
-	corner(minimizeCircle, 999)
-	stroke(minimizeCircle, Color3.fromRGB(40,40,40), 1.5)
-
+	corner(minCircle, 999)
+	stroke(minCircle, Color3.fromRGB(45, 45, 45), 1.5)
 	new("TextLabel", {
-		Size               = UDim2.new(1,0,1,0),
+		Size = UDim2.new(1, 0, 1, 0),
 		BackgroundTransparency = 1,
-		Text               = "C",
-		TextColor3         = Color3.fromRGB(255,255,255),
-		TextSize           = 22,
-		Font               = Enum.Font.GothamBold,
-		ZIndex             = 601,
-	}, minimizeCircle)
+		Text = "C",
+		TextColor3 = Color3.fromRGB(255, 255, 255),
+		TextSize = 24,
+		Font = Enum.Font.GothamBold,
+		ZIndex = 601,
+	}, minCircle)
 
-	-- Make minimize circle draggable
-	makeDraggable(minimizeCircle, minimizeCircle, nil)
-
-	local minimized = false
-
-	-- Tap the circle → restore window
-	local circTapStart = Vector2.new(0,0)
-	minimizeCircle.InputBegan:Connect(function(i)
-		if i.UserInputType == Enum.UserInputType.Touch then
-			circTapStart = Vector2.new(i.Position.X, i.Position.Y)
+	-- Drag the circle (mouse + touch)
+	local cDragging, cDragStart, cStartPos = false, nil, nil
+	minCircle.InputBegan:Connect(function(i)
+		if i.UserInputType == Enum.UserInputType.MouseButton1 or
+		   i.UserInputType == Enum.UserInputType.Touch then
+			cDragging = true
+			cDragStart = i.Position
+			cStartPos = minCircle.Position
 		end
 	end)
-	minimizeCircle.InputEnded:Connect(function(i)
+	UserInputService.InputChanged:Connect(function(i)
+		if cDragging and (i.UserInputType == Enum.UserInputType.MouseMovement or
+		                  i.UserInputType == Enum.UserInputType.Touch) then
+			local d = i.Position - cDragStart
+			minCircle.Position = UDim2.new(cStartPos.X.Scale, cStartPos.X.Offset + d.X,
+			                               cStartPos.Y.Scale, cStartPos.Y.Offset + d.Y)
+		end
+	end)
+	UserInputService.InputEnded:Connect(function(i)
+		if i.UserInputType == Enum.UserInputType.MouseButton1 or
+		   i.UserInputType == Enum.UserInputType.Touch then
+			cDragging = false
+		end
+	end)
+
+	-- Tap circle to restore window
+	local cTapStart = Vector2.new(0, 0)
+	minCircle.InputBegan:Connect(function(i)
 		if i.UserInputType == Enum.UserInputType.Touch then
-			local dist = (Vector2.new(i.Position.X, i.Position.Y) - circTapStart).Magnitude
-			if dist < 15 then
-				minimized = false
-				window.Visible     = true
+			cTapStart = Vector2.new(i.Position.X, i.Position.Y)
+		end
+	end)
+	minCircle.InputEnded:Connect(function(i)
+		if i.UserInputType == Enum.UserInputType.Touch then
+			if (Vector2.new(i.Position.X, i.Position.Y) - cTapStart).Magnitude < 15 and not cDragging then
+				window.Visible = true
 				glowHolder.Visible = true
-				minimizeCircle.Visible = false
+				minCircle.Visible = false
 			end
 		end
 	end)
-	minimizeCircle.MouseButton1Click:Connect(function()
-		minimized = false
-		window.Visible     = true
+	minCircle.MouseButton1Click:Connect(function()
+		window.Visible = true
 		glowHolder.Visible = true
-		minimizeCircle.Visible = false
+		minCircle.Visible = false
 	end)
 
-	-- Minimize button → hide window, show circle
+	local minimized = false
 	minBtn.MouseButton1Click:Connect(function()
-		minimized = true
-		window.Visible     = false
-		glowHolder.Visible = false
-		minimizeCircle.Visible = true
+		minimized = not minimized
+		window.Visible = not minimized
+		glowHolder.Visible = not minimized
+		minCircle.Visible = minimized
 	end)
 	minBtn.InputEnded:Connect(function(i)
 		if i.UserInputType == Enum.UserInputType.Touch then
-			minimized = true
-			window.Visible     = false
-			glowHolder.Visible = false
-			minimizeCircle.Visible = true
+			minimized = not minimized
+			window.Visible = not minimized
+			glowHolder.Visible = not minimized
+			minCircle.Visible = minimized
 		end
 	end)
 
 	-- ── Sidebar ──
 	local sidebar = new("Frame", {
-		Size             = UDim2.new(0, 175, 1, -46 - 28),
-		Position         = UDim2.new(0, 0, 0, 46),
+		Size = UDim2.new(0, 175, 1, -46 - 28),
+		Position = UDim2.new(0, 0, 0, 46),
 		BackgroundColor3 = Color3.fromRGB(12,12,12),
-		BorderSizePixel  = 0,
-		ZIndex           = 2,
+		BorderSizePixel = 0,
+		ZIndex = 2,
 	}, window)
 
 	new("Frame", {
-		Size             = UDim2.new(0, 1, 1, 0),
-		Position         = UDim2.new(1, -1, 0, 0),
+		Size = UDim2.new(0, 1, 1, 0),
+		Position = UDim2.new(1, -1, 0, 0),
 		BackgroundColor3 = Color3.fromRGB(30,30,30),
-		BorderSizePixel  = 0,
-		ZIndex           = 3,
+		BorderSizePixel = 0,
+		ZIndex = 3,
 	}, sidebar)
 
 	local sbScroll = new("ScrollingFrame", {
-		Size                  = UDim2.new(1, -1, 1, 0),
-		BackgroundTransparency= 1,
-		BorderSizePixel       = 0,
-		ScrollBarThickness    = 0,
-		ScrollingEnabled      = true,     -- FIX: was false
-		ScrollingDirection    = Enum.ScrollingDirection.Y,
-		ElasticBehavior       = Enum.ElasticBehavior.Never,
-		CanvasSize            = UDim2.new(0,0,0,0),
-		Active                = true,
-		ZIndex                = 2,
+		Size = UDim2.new(1, -1, 1, 0),
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		ScrollBarThickness = 0,
+		ScrollingEnabled = true,
+		ScrollingDirection = Enum.ScrollingDirection.Y,
+		ElasticBehavior = Enum.ElasticBehavior.Never,
+		CanvasSize = UDim2.new(0,0,0,0),
+		Active = true,
+		ZIndex = 2,
 	}, sidebar)
 
 	local sbLayout = new("UIListLayout", {SortOrder=Enum.SortOrder.LayoutOrder, Padding=UDim.new(0,0)}, sbScroll)
 	sbLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
 		sbScroll.CanvasSize = UDim2.new(0,0,0,sbLayout.AbsoluteContentSize.Y)
 	end)
-	local sbPad = Instance.new("UIPadding")
-	sbPad.PaddingTop = UDim.new(0,12); sbPad.Parent = sbScroll
-
-	-- Touch scroll for sidebar
-	addTouchScroll(sbScroll)
+	local sbPad = Instance.new("UIPadding"); sbPad.PaddingTop = UDim.new(0,12); sbPad.Parent = sbScroll
 
 	-- ── Content Area ──
 	local contentArea = new("Frame", {
-		Size             = UDim2.new(1, -175, 1, -46 - 28),
-		Position         = UDim2.new(0, 175, 0, 46),
+		Size = UDim2.new(1, -175, 1, -46 - 28),
+		Position = UDim2.new(0, 175, 0, 46),
 		BackgroundColor3 = Color3.fromRGB(15,15,15),
-		BorderSizePixel  = 0,
+		BorderSizePixel = 0,
 		ClipsDescendants = true,
-		ZIndex           = 2,
+		ZIndex = 2,
 	}, window)
 
 	local pageScroll = new("ScrollingFrame", {
-		Size                  = UDim2.new(1,0,1,0),
-		BackgroundTransparency= 1,
-		BorderSizePixel       = 0,
-		ScrollBarThickness    = 3,
-		ScrollBarImageColor3  = Color3.fromRGB(55,55,55),
-		ScrollingEnabled      = true,
-		ScrollingDirection    = Enum.ScrollingDirection.Y,
-		ElasticBehavior       = Enum.ElasticBehavior.Always,
-		CanvasSize            = UDim2.new(0,0,0,0),
-		ClipsDescendants      = true,
-		ZIndex                = 2,
+		Size = UDim2.new(1,0,1,0),
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		ScrollBarThickness = 3,
+		ScrollBarImageColor3 = Color3.fromRGB(55,55,55),
+		ScrollingEnabled = true,
+		ScrollingDirection = Enum.ScrollingDirection.Y,
+		ElasticBehavior = Enum.ElasticBehavior.Always,
+		CanvasSize = UDim2.new(0,0,0,0),
+		ClipsDescendants = true,
+		ZIndex = 2,
 	}, contentArea)
 
-	-- Touch scroll for content area
-	addTouchScroll(pageScroll)
-
-	-- Smooth mouse-wheel scroll
+	-- Smooth scroll with accumulated target and camera zoom sink
 	local scrollTargets = {}
+	local hoveredFrames = {}
 	local function hookSlowScroll(frame)
 		scrollTargets[frame] = 0
+		frame.MouseEnter:Connect(function() hoveredFrames[frame] = true end)
+		frame.MouseLeave:Connect(function() hoveredFrames[frame] = false end)
 		frame.InputChanged:Connect(function(input)
 			if input.UserInputType == Enum.UserInputType.MouseWheel then
 				local maxY = math.max(0, frame.AbsoluteCanvasSize.Y - frame.AbsoluteSize.Y)
@@ -467,104 +433,111 @@ function Celestra:CreateWindow(config)
 
 	-- ── Status Bar ──
 	local statusBar = new("Frame", {
-		Size             = UDim2.new(1,0,0,28),
-		Position         = UDim2.new(0,0,1,-28),
+		Size = UDim2.new(1,0,0,28),
+		Position = UDim2.new(0,0,1,-28),
 		BackgroundColor3 = Color3.fromRGB(11,11,11),
-		BorderSizePixel  = 0,
-		ZIndex           = 2,
+		BorderSizePixel = 0,
+		ZIndex = 2,
 	}, window)
 
 	new("Frame", {
-		Size             = UDim2.new(1,0,0,1),
+		Size = UDim2.new(1,0,0,1),
 		BackgroundColor3 = Color3.fromRGB(30,30,30),
-		BorderSizePixel  = 0,
-		ZIndex           = 2,
+		BorderSizePixel = 0,
+		ZIndex = 2,
 	}, statusBar)
 
+	-- Status dot helper
 	local function makeGlowDot(parent, col, xOff)
 		local halos = {{size=13,trans=0.92},{size=10,trans=0.87},{size=8,trans=0.82}}
 		for _, hd in ipairs(halos) do
 			local halo = new("Frame", {
-				Size                  = UDim2.new(0,hd.size,0,hd.size),
-				Position              = UDim2.new(0, xOff-(hd.size-7)/2, 0.5, -hd.size/2),
-				BackgroundColor3      = col,
-				BackgroundTransparency= hd.trans,
-				BorderSizePixel       = 0,
-				ZIndex                = 2,
+				Size = UDim2.new(0,hd.size,0,hd.size),
+				Position = UDim2.new(0, xOff-(hd.size-7)/2, 0.5, -hd.size/2),
+				BackgroundColor3 = col,
+				BackgroundTransparency = hd.trans,
+				BorderSizePixel = 0,
+				ZIndex = 2,
 			}, parent)
 			corner(halo, 999)
 		end
 		local d = new("Frame", {
-			Size             = UDim2.new(0,7,0,7),
-			Position         = UDim2.new(0,xOff,0.5,-3),
+			Size = UDim2.new(0,7,0,7),
+			Position = UDim2.new(0,xOff,0.5,-3),
 			BackgroundColor3 = col,
-			BorderSizePixel  = 0,
-			ZIndex           = 3,
+			BorderSizePixel = 0,
+			ZIndex = 3,
 		}, parent)
 		corner(d, 999)
 	end
 
+	-- status helpers above handle all status text
+
+	-- Default status items (overridable)
 	local greenDot = Color3.fromRGB(50,210,95)
 	makeGlowDot(statusBar, greenDot, 16)
 	local statusLabel1 = new("TextLabel", {
-		Size               = UDim2.new(0,220,1,0),
-		Position           = UDim2.new(0,30,0,0),
+		Size = UDim2.new(0,220,1,0),
+		Position = UDim2.new(0,30,0,0),
 		BackgroundTransparency = 1,
-		Text               = config.Status or "Status: Ready",
-		TextColor3         = Color3.fromRGB(90,90,90),
-		TextSize           = 10,
-		Font               = Enum.Font.Gotham,
-		TextXAlignment     = Enum.TextXAlignment.Left,
-		ZIndex             = 3,
+		Text = config.Status or "Status: Ready",
+		TextColor3 = Color3.fromRGB(90,90,90),
+		TextSize = 10,
+		Font = Enum.Font.Gotham,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		ZIndex = 3,
 	}, statusBar)
 
 	new("Frame", {
-		Size             = UDim2.new(0,1,0,13),
-		Position         = UDim2.new(0,248,0.5,-6),
+		Size = UDim2.new(0,1,0,13),
+		Position = UDim2.new(0,248,0.5,-6),
 		BackgroundColor3 = Color3.fromRGB(34,34,34),
-		BorderSizePixel  = 0,
-		ZIndex           = 2,
+		BorderSizePixel = 0,
+		ZIndex = 2,
 	}, statusBar)
 
 	makeGlowDot(statusBar, greenDot, 258)
 	local statusLabel2 = new("TextLabel", {
-		Size               = UDim2.new(0,220,1,0),
-		Position           = UDim2.new(0,272,0,0),
+		Size = UDim2.new(0,220,1,0),
+		Position = UDim2.new(0,272,0,0),
 		BackgroundTransparency = 1,
-		Text               = config.StatusRight or "",
-		TextColor3         = Color3.fromRGB(90,90,90),
-		TextSize           = 10,
-		Font               = Enum.Font.Gotham,
-		TextXAlignment     = Enum.TextXAlignment.Left,
-		ZIndex             = 3,
+		Text = config.StatusRight or "",
+		TextColor3 = Color3.fromRGB(90,90,90),
+		TextSize = 10,
+		Font = Enum.Font.Gotham,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		ZIndex = 3,
 	}, statusBar)
 
 	-- ── Page system ──
-	local allPages    = {}
-	local curPage     = nil
-	local sbItemRefs  = {}
-	local pageLayouts = {}
+	local allPages = {}
+	local curPage  = nil
+	local sbItemRefs = {}
+	local categoryOrder = 0
+
+	local pageLayouts = {}   -- [key] = UIListLayout, so showPage can read content size
 
 	local function makePage(key)
 		local page = new("Frame", {
-			Size             = UDim2.new(1,0,1,0),
+			Size = UDim2.new(1,0,1,0),
 			BackgroundTransparency = 1,
-			BorderSizePixel  = 0,
-			Visible          = false,
-			ClipsDescendants = false,
-			ZIndex           = 2,
+			BorderSizePixel = 0,
+			Visible = false,
+			ClipsDescendants = false,   -- allow dropdown popups to overflow
+			ZIndex = 2,
 		}, pageScroll)
 		local layout = new("UIListLayout", {SortOrder=Enum.SortOrder.LayoutOrder, Padding=UDim.new(0,12)}, page)
 		local pad = Instance.new("UIPadding")
 		pad.PaddingTop = UDim.new(0,14); pad.PaddingBottom = UDim.new(0,14)
 		pad.PaddingLeft = UDim.new(0,14); pad.PaddingRight = UDim.new(0,14)
 		pad.Parent = page
+		-- Keep canvas size in sync whenever THIS page is the active one
 		layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
 			if page.Visible then
 				pageScroll.CanvasSize = UDim2.new(0,0,0,layout.AbsoluteContentSize.Y + 28)
 			end
 		end)
-		allPages[key]    = page
+		allPages[key] = page
 		pageLayouts[key] = layout
 		return page
 	end
@@ -575,6 +548,7 @@ function Celestra:CreateWindow(config)
 			allPages[key].Visible = true
 			curPage = allPages[key]
 			pageScroll.CanvasPosition = Vector2.new(0,0)
+			-- Update canvas size for the newly shown page
 			local layout = pageLayouts[key]
 			if layout then
 				pageScroll.CanvasSize = UDim2.new(0,0,0,layout.AbsoluteContentSize.Y + 28)
@@ -582,19 +556,12 @@ function Celestra:CreateWindow(config)
 		end
 	end
 
-	-- Toggle key (keyboard only)
+	-- Toggle key
 	UserInputService.InputBegan:Connect(function(i, gp)
 		if not gp and i.KeyCode == toggleKey then
-			if minimized then
-				minimized = false
-				window.Visible     = true
-				glowHolder.Visible = true
-				minimizeCircle.Visible = false
-			else
-				local showing = not window.Visible
-				window.Visible     = showing
-				glowHolder.Visible = showing
-			end
+			local showing = not window.Visible
+			window.Visible = showing
+			glowHolder.Visible = showing
 		end
 	end)
 
@@ -602,15 +569,16 @@ function Celestra:CreateWindow(config)
 	-- WINDOW OBJECT
 	-- ============================================================
 	local Window = {}
-	Window._screenGui   = screenGui
-	Window._sbScroll    = sbScroll
-	Window._pageScroll  = pageScroll
-	Window._sbItemRefs  = sbItemRefs
-	Window._allPages    = allPages
+	Window._screenGui = screenGui
+	Window._sbScroll = sbScroll
+	Window._pageScroll = pageScroll
+	Window._sbItemRefs = sbItemRefs
+	Window._allPages = allPages
 	Window._categoryOrder = 0
 
+	-- Set status text
 	function Window:SetStatus(left, right)
-		if left  then statusLabel1.Text = left  end
+		if left then statusLabel1.Text = left end
 		if right then statusLabel2.Text = right end
 	end
 
@@ -620,42 +588,42 @@ function Celestra:CreateWindow(config)
 		local lo = self._categoryOrder * 2
 
 		local catFrame = new("Frame", {
-			Size                  = UDim2.new(1,0,0,30),
-			BackgroundTransparency= 1,
-			BorderSizePixel       = 0,
-			LayoutOrder           = lo,
-			ZIndex                = 2,
+			Size = UDim2.new(1,0,0,30),
+			BackgroundTransparency = 1,
+			BorderSizePixel = 0,
+			LayoutOrder = lo,
+			ZIndex = 2,
 		}, sbScroll)
 
-		new("TextLabel", {
-			Size               = UDim2.new(1,-30,1,0),
-			Position           = UDim2.new(0,18,0,0),
+		local catLbl = new("TextLabel", {
+			Size = UDim2.new(1,-30,1,0),
+			Position = UDim2.new(0,18,0,0),
 			BackgroundTransparency = 1,
-			Text               = label:upper(),
-			TextColor3         = Color3.fromRGB(130,130,130),
-			TextSize           = 11,
-			Font               = Enum.Font.GothamBold,
-			TextXAlignment     = Enum.TextXAlignment.Left,
-			ZIndex             = 2,
+			Text = label:upper(),
+			TextColor3 = Color3.fromRGB(130,130,130),
+			TextSize = 11,
+			Font = Enum.Font.GothamBold,
+			TextXAlignment = Enum.TextXAlignment.Left,
+			ZIndex = 2,
 		}, catFrame)
 
 		local arrow = new("TextLabel", {
-			Size               = UDim2.new(0,18,1,0),
-			Position           = UDim2.new(1,-22,0,0),
+			Size = UDim2.new(0,18,1,0),
+			Position = UDim2.new(1,-22,0,0),
 			BackgroundTransparency = 1,
-			Text               = "−",
-			TextColor3         = Color3.fromRGB(60,60,60),
-			TextSize           = 14,
-			Font               = Enum.Font.GothamBold,
-			ZIndex             = 2,
+			Text = "−",
+			TextColor3 = Color3.fromRGB(60,60,60),
+			TextSize = 14,
+			Font = Enum.Font.GothamBold,
+			ZIndex = 2,
 		}, catFrame)
 
 		local subContainer = new("Frame", {
-			BackgroundTransparency= 1,
-			BorderSizePixel       = 0,
-			LayoutOrder           = lo + 0.5,
-			ZIndex                = 2,
-			ClipsDescendants      = true,
+			BackgroundTransparency = 1,
+			BorderSizePixel = 0,
+			LayoutOrder = lo + 0.5,
+			ZIndex = 2,
+			ClipsDescendants = true,
 		}, sbScroll)
 
 		local subLayout = new("UIListLayout", {SortOrder=Enum.SortOrder.LayoutOrder, Padding=UDim.new(0,0)}, subContainer)
@@ -665,114 +633,115 @@ function Celestra:CreateWindow(config)
 			subContainer.Size = UDim2.new(1,0,0, expanded and subLayout.AbsoluteContentSize.Y or 0)
 		end)
 
-		-- Category collapse button (mouse + touch)
 		local catBtn = new("TextButton", {
-			Size                  = UDim2.new(1,0,1,0),
-			BackgroundTransparency= 1,
-			Text                  = "",
-			ZIndex                = 3,
+			Size = UDim2.new(1,0,1,0),
+			BackgroundTransparency = 1,
+			Text = "",
+			ZIndex = 3,
 		}, catFrame)
-
-		local function toggleCat()
+		catBtn.MouseButton1Click:Connect(function()
 			expanded = not expanded
 			arrow.Text = expanded and "−" or "+"
 			local targetH = expanded and subLayout.AbsoluteContentSize.Y or 0
 			tween(subContainer, {Size=UDim2.new(1,0,0,targetH)}, 0.2)
-		end
-		catBtn.MouseButton1Click:Connect(toggleCat)
-		catBtn.InputEnded:Connect(function(i)
-			if i.UserInputType == Enum.UserInputType.Touch then toggleCat() end
 		end)
 
 		-- Category object
 		local Category = {}
 		Category._subContainer = subContainer
-		Category._pageOrder    = 0
-		Category._window       = self
+		Category._pageOrder = 0
+		Category._window = self
 
 		-- ── AddPage ──
 		function Category:AddPage(label)
 			self._pageOrder = self._pageOrder + 1
-			local pageKey = tostring({}):sub(10)
+			local pageKey = tostring({}):sub(10) -- unique key
 
 			local page = makePage(pageKey)
 
 			-- Sidebar item
 			local btn = new("TextButton", {
-				Size                  = UDim2.new(1,0,0,36),  -- FIX: taller tap target for mobile
-				BackgroundTransparency= 1,
-				BorderSizePixel       = 0,
-				Text                  = "",
-				LayoutOrder           = self._pageOrder,
-				ZIndex                = 2,
+				Size = UDim2.new(1,0,0,28),
+				BackgroundTransparency = 1,
+				BorderSizePixel = 0,
+				Text = "",
+				LayoutOrder = self._pageOrder,
+				ZIndex = 2,
 			}, subContainer)
 
 			local lbl = new("TextLabel", {
-				Size               = UDim2.new(1,-20,1,0),
-				Position           = UDim2.new(0,28,0,0),
+				Size = UDim2.new(1,-20,1,0),
+				Position = UDim2.new(0,28,0,0),
 				BackgroundTransparency = 1,
-				Text               = label,
-				TextColor3         = Color3.fromRGB(105,105,105),
-				TextSize           = 13,
-				Font               = Enum.Font.Gotham,
-				TextXAlignment     = Enum.TextXAlignment.Left,
-				ZIndex             = 2,
+				Text = label,
+				TextColor3 = Color3.fromRGB(105,105,105),
+				TextSize = 13,
+				Font = Enum.Font.Gotham,
+				TextXAlignment = Enum.TextXAlignment.Left,
+				ZIndex = 2,
 			}, btn)
 
 			local ulGlow = new("Frame", {
-				Size             = UDim2.new(0,22,0,4),
-				Position         = UDim2.new(0,27,1,-5),
+				Size = UDim2.new(0,22,0,4),
+				Position = UDim2.new(0,27,1,-5),
 				BackgroundColor3 = Color3.fromRGB(45,110,220),
 				BackgroundTransparency = 0.65,
-				BorderSizePixel  = 0,
-				Visible          = false,
-				ZIndex           = 2,
+				BorderSizePixel = 0,
+				Visible = false,
+				ZIndex = 2,
 			}, btn)
 			corner(ulGlow, 999)
 
 			local ul = new("Frame", {
-				Size             = UDim2.new(0,20,0,2),
-				Position         = UDim2.new(0,28,1,-4),
+				Size = UDim2.new(0,20,0,2),
+				Position = UDim2.new(0,28,1,-4),
 				BackgroundColor3 = Color3.fromRGB(60,130,240),
-				BorderSizePixel  = 0,
-				Visible          = false,
-				ZIndex           = 3,
+				BorderSizePixel = 0,
+				Visible = false,
+				ZIndex = 3,
 			}, btn)
 			corner(ul, 999)
 
 			local ref = {btn=btn, lbl=lbl, ul=ul, ulGlow=ulGlow, key=pageKey}
 			table.insert(sbItemRefs, ref)
 
-			local function selectPage()
+			btn.MouseButton1Click:Connect(function()
 				for _, r in ipairs(sbItemRefs) do
 					tween(r.lbl, {TextColor3=Color3.fromRGB(105,105,105)}, 0.12)
-					r.lbl.Font     = Enum.Font.Gotham
-					r.ul.Visible   = false
+					r.lbl.Font = Enum.Font.Gotham
+					r.ul.Visible = false
 					r.ulGlow.Visible = false
 				end
 				tween(lbl, {TextColor3=Color3.fromRGB(225,225,225)}, 0.12)
-				lbl.Font        = Enum.Font.GothamBold
-				ul.Visible      = true
-				ulGlow.Visible  = true
+				lbl.Font = Enum.Font.GothamBold
+				ul.Visible = true
+				ulGlow.Visible = true
 				showPage(pageKey)
-			end
-
-			-- Mouse click
-			btn.MouseButton1Click:Connect(selectPage)
-			-- Touch tap — FIX: explicitly handle Touch input ended
-			local btnTapStart = Vector2.new(0,0)
+			end)
+			-- Touch support for tabs
+			local tabTapStart = Vector2.new(0,0)
 			btn.InputBegan:Connect(function(i)
 				if i.UserInputType == Enum.UserInputType.Touch then
-					btnTapStart = Vector2.new(i.Position.X, i.Position.Y)
+					tabTapStart = Vector2.new(i.Position.X, i.Position.Y)
 				end
 			end)
 			btn.InputEnded:Connect(function(i)
 				if i.UserInputType == Enum.UserInputType.Touch then
-					local dist = (Vector2.new(i.Position.X, i.Position.Y) - btnTapStart).Magnitude
-					if dist < 20 then selectPage() end
+					if (Vector2.new(i.Position.X, i.Position.Y) - tabTapStart).Magnitude < 20 then
+						for _, r in ipairs(sbItemRefs) do
+							tween(r.lbl, {TextColor3=Color3.fromRGB(105,105,105)}, 0.12)
+							r.lbl.Font = Enum.Font.Gotham
+							r.ul.Visible = false
+							r.ulGlow.Visible = false
+						end
+						tween(lbl, {TextColor3=Color3.fromRGB(225,225,225)}, 0.12)
+						lbl.Font = Enum.Font.GothamBold
+						ul.Visible = true
+						ulGlow.Visible = true
+						showPage(pageKey)
+					end
 				end
 			end)
-
 			btn.MouseEnter:Connect(function()
 				if not ul.Visible then tween(lbl, {TextColor3=Color3.fromRGB(150,150,150)}, 0.1) end
 			end)
@@ -783,15 +752,15 @@ function Celestra:CreateWindow(config)
 			-- Auto-select first page
 			if #sbItemRefs == 1 then
 				lbl.TextColor3 = Color3.fromRGB(225,225,225)
-				lbl.Font       = Enum.Font.GothamBold
-				ul.Visible     = true
+				lbl.Font = Enum.Font.GothamBold
+				ul.Visible = true
 				ulGlow.Visible = true
 				showPage(pageKey)
 			end
 
 			-- Page object
 			local Page = {}
-			Page._page      = page
+			Page._page = page
 			Page._cardOrder = 0
 			Page._screenGui = screenGui
 
@@ -802,12 +771,12 @@ function Celestra:CreateWindow(config)
 
 				local card = new("Frame", {
 					BackgroundColor3 = Color3.fromRGB(19,19,19),
-					BorderSizePixel  = 0,
-					LayoutOrder      = lo,
-					AutomaticSize    = Enum.AutomaticSize.Y,
-					Size             = UDim2.new(1,-28,0,0),
+					BorderSizePixel = 0,
+					LayoutOrder = lo,
+					AutomaticSize = Enum.AutomaticSize.Y,
+					Size = UDim2.new(1,-28,0,0),
 					ClipsDescendants = false,
-					ZIndex           = 2,
+					ZIndex = 2,
 				}, page)
 				corner(card, 6)
 				stroke(card, Color3.fromRGB(32,32,32), 1)
@@ -815,35 +784,35 @@ function Celestra:CreateWindow(config)
 
 				-- Section header
 				local hf = new("Frame", {
-					Size             = UDim2.new(1,0,0,40),
+					Size = UDim2.new(1,0,0,40),
 					BackgroundTransparency = 1,
-					BorderSizePixel  = 0,
-					LayoutOrder      = 0,
-					ZIndex           = 2,
+					BorderSizePixel = 0,
+					LayoutOrder = 0,
+					ZIndex = 2,
 				}, card)
 				new("TextLabel", {
-					Size               = UDim2.new(1,-20,1,0),
-					Position           = UDim2.new(0,16,0,0),
+					Size = UDim2.new(1,-20,1,0),
+					Position = UDim2.new(0,16,0,0),
 					BackgroundTransparency = 1,
-					Text               = headerText:upper(),
-					TextColor3         = Color3.fromRGB(82,88,96),
-					TextSize           = 11,
-					Font               = Enum.Font.GothamBold,
-					TextXAlignment     = Enum.TextXAlignment.Left,
-					ZIndex             = 2,
+					Text = headerText:upper(),
+					TextColor3 = Color3.fromRGB(82,88,96),
+					TextSize = 11,
+					Font = Enum.Font.GothamBold,
+					TextXAlignment = Enum.TextXAlignment.Left,
+					ZIndex = 2,
 				}, hf)
 				new("Frame", {
-					Size             = UDim2.new(1,0,0,1),
-					Position         = UDim2.new(0,0,1,-1),
+					Size = UDim2.new(1,0,0,1),
+					Position = UDim2.new(0,0,1,-1),
 					BackgroundColor3 = Color3.fromRGB(28,28,28),
-					BorderSizePixel  = 0,
-					ZIndex           = 2,
+					BorderSizePixel = 0,
+					ZIndex = 2,
 				}, hf)
 
 				-- Card object
 				local Card = {}
-				Card._card      = card
-				Card._rowOrder  = 0
+				Card._card = card
+				Card._rowOrder = 0
 				Card._screenGui = screenGui
 
 				-- ── AddToggle ──
@@ -854,47 +823,47 @@ function Celestra:CreateWindow(config)
 					Registry[id] = on
 
 					local row = new("Frame", {
-						Size             = UDim2.new(1,0,0,52),
+						Size = UDim2.new(1,0,0,52),
 						BackgroundTransparency = 1,
-						BorderSizePixel  = 0,
-						LayoutOrder      = self._rowOrder,
-						ZIndex           = 2,
+						BorderSizePixel = 0,
+						LayoutOrder = self._rowOrder,
+						ZIndex = 2,
 					}, card)
 
 					new("TextLabel", {
-						Size               = UDim2.new(1,-56,0,20),
-						Position           = UDim2.new(0,16,0,8),
+						Size = UDim2.new(1,-56,0,20),
+						Position = UDim2.new(0,16,0,8),
 						BackgroundTransparency = 1,
-						Text               = opts.Title or id,
-						TextColor3         = Color3.fromRGB(215,215,215),
-						TextSize           = 13,
-						Font               = Enum.Font.GothamBold,
-						TextXAlignment     = Enum.TextXAlignment.Left,
-						ZIndex             = 2,
+						Text = opts.Title or id,
+						TextColor3 = Color3.fromRGB(215,215,215),
+						TextSize = 13,
+						Font = Enum.Font.GothamBold,
+						TextXAlignment = Enum.TextXAlignment.Left,
+						ZIndex = 2,
 					}, row)
 
 					new("TextLabel", {
-						Size               = UDim2.new(1,-56,0,15),
-						Position           = UDim2.new(0,16,0,30),
+						Size = UDim2.new(1,-56,0,15),
+						Position = UDim2.new(0,16,0,30),
 						BackgroundTransparency = 1,
-						Text               = opts.Desc or "",
-						TextColor3         = Color3.fromRGB(72,72,72),
-						TextSize           = 11,
-						Font               = Enum.Font.Gotham,
-						TextXAlignment     = Enum.TextXAlignment.Left,
-						ZIndex             = 2,
+						Text = opts.Desc or "",
+						TextColor3 = Color3.fromRGB(72,72,72),
+						TextSize = 11,
+						Font = Enum.Font.Gotham,
+						TextXAlignment = Enum.TextXAlignment.Left,
+						ZIndex = 2,
 					}, row)
 
 					local cb = new("TextButton", {
-						Size             = UDim2.new(0,30,0,30),   -- FIX: bigger tap target
-						Position         = UDim2.new(1,-40,0.5,-15),
+						Size = UDim2.new(0,22,0,22),
+						Position = UDim2.new(1,-36,0.5,-11),
 						BackgroundColor3 = Color3.fromRGB(14,14,14),
-						BorderSizePixel  = 0,
-						Text             = "",
-						ZIndex           = 3,
+						BorderSizePixel = 0,
+						Text = "",
+						ZIndex = 3,
 					}, row)
 					local cbs = stroke(cb, Color3.fromRGB(72,72,72), 1.5)
-					corner(cb, 4)
+					corner(cb, 3)
 
 					local function refresh()
 						cbs.Color = on and Color3.fromRGB(45,110,220) or Color3.fromRGB(72,72,72)
@@ -902,15 +871,11 @@ function Celestra:CreateWindow(config)
 					end
 					refresh()
 
-					local function toggle()
+					cb.MouseButton1Click:Connect(function()
 						on = not on
 						Registry[id] = on
 						refresh()
 						if opts.Callback then opts.Callback(on) end
-					end
-					cb.MouseButton1Click:Connect(toggle)
-					cb.InputEnded:Connect(function(i)
-						if i.UserInputType == Enum.UserInputType.Touch then toggle() end
 					end)
 
 					local elem = {}
@@ -930,82 +895,82 @@ function Celestra:CreateWindow(config)
 					Registry[id] = val
 
 					local row = new("Frame", {
-						Size             = UDim2.new(1,0,0,66),   -- FIX: taller for touch
+						Size = UDim2.new(1,0,0,58),
 						BackgroundTransparency = 1,
-						BorderSizePixel  = 0,
-						LayoutOrder      = self._rowOrder,
-						ZIndex           = 2,
+						BorderSizePixel = 0,
+						LayoutOrder = self._rowOrder,
+						ZIndex = 2,
 					}, card)
 
 					new("TextLabel", {
-						Size               = UDim2.new(0.55,0,0,18),
-						Position           = UDim2.new(0,16,0,7),
+						Size = UDim2.new(0.55,0,0,18),
+						Position = UDim2.new(0,16,0,7),
 						BackgroundTransparency = 1,
-						Text               = opts.Title or id,
-						TextColor3         = Color3.fromRGB(215,215,215),
-						TextSize           = 13,
-						Font               = Enum.Font.GothamBold,
-						TextXAlignment     = Enum.TextXAlignment.Left,
-						ZIndex             = 2,
+						Text = opts.Title or id,
+						TextColor3 = Color3.fromRGB(215,215,215),
+						TextSize = 13,
+						Font = Enum.Font.GothamBold,
+						TextXAlignment = Enum.TextXAlignment.Left,
+						ZIndex = 2,
 					}, row)
 
 					new("TextLabel", {
-						Size               = UDim2.new(0.6,0,0,14),
-						Position           = UDim2.new(0,16,0,27),
+						Size = UDim2.new(0.6,0,0,14),
+						Position = UDim2.new(0,16,0,27),
 						BackgroundTransparency = 1,
-						Text               = opts.Desc or "",
-						TextColor3         = Color3.fromRGB(72,72,72),
-						TextSize           = 11,
-						Font               = Enum.Font.Gotham,
-						TextXAlignment     = Enum.TextXAlignment.Left,
-						ZIndex             = 2,
+						Text = opts.Desc or "",
+						TextColor3 = Color3.fromRGB(72,72,72),
+						TextSize = 11,
+						Font = Enum.Font.Gotham,
+						TextXAlignment = Enum.TextXAlignment.Left,
+						ZIndex = 2,
 					}, row)
 
 					local valBadge = new("Frame", {
-						Size             = UDim2.new(0,38,0,18),
-						Position         = UDim2.new(1,-54,0,8),
+						Size = UDim2.new(0,38,0,18),
+						Position = UDim2.new(1,-54,0,8),
 						BackgroundColor3 = Color3.fromRGB(22,22,22),
-						BorderSizePixel  = 0,
-						ZIndex           = 3,
+						BorderSizePixel = 0,
+						ZIndex = 3,
 					}, row)
 					corner(valBadge, 4)
 					stroke(valBadge, Color3.fromRGB(40,40,40), 1)
 
 					local valLbl = new("TextLabel", {
-						Size               = UDim2.new(1,0,1,0),
+						Size = UDim2.new(1,0,1,0),
 						BackgroundTransparency = 1,
-						Text               = tostring(val),
-						TextColor3         = Color3.fromRGB(140,140,140),
-						TextSize           = 11,
-						Font               = Enum.Font.GothamBold,
-						ZIndex             = 4,
+						Text = tostring(val),
+						TextColor3 = Color3.fromRGB(140,140,140),
+						TextSize = 11,
+						Font = Enum.Font.GothamBold,
+						ZIndex = 4,
 					}, valBadge)
 
 					local track = new("Frame", {
-						Size             = UDim2.new(1,-32,0,8),   -- FIX: taller track for touch
-						Position         = UDim2.new(0,16,0,52),
+						Size = UDim2.new(1,-32,0,3),
+						Position = UDim2.new(0,16,0,46),
 						BackgroundColor3 = Color3.fromRGB(30,30,30),
-						BorderSizePixel  = 0,
-						ZIndex           = 3,
+						BorderSizePixel = 0,
+						ZIndex = 3,
 					}, row)
 					corner(track, 999)
 
 					local pct0 = (val - minV) / (maxV - minV)
 					local fill = new("Frame", {
-						Size             = UDim2.new(pct0,0,1,0),
+						Size = UDim2.new(pct0,0,1,0),
 						BackgroundColor3 = Color3.fromRGB(45,110,220),
-						BorderSizePixel  = 0,
-						ZIndex           = 4,
+						BorderSizePixel = 0,
+						ZIndex = 4,
 					}, track)
 					corner(fill, 999)
 
 					local cap = new("Frame", {
-						Size             = UDim2.new(0,8,1,0),  -- FIX: bigger cap for touch
-						AnchorPoint      = Vector2.new(0.5,0),
-						Position         = UDim2.new(pct0,0,0,0),
+						Size = UDim2.new(0,3,1,0),
+						AnchorPoint = Vector2.new(0.5,0),
+						Position = UDim2.new(pct0,0,0,0),
 						BackgroundColor3 = Color3.fromRGB(100,165,255),
-						BorderSizePixel  = 0,
-						ZIndex           = 5,
+						BorderSizePixel = 0,
+						ZIndex = 5,
 					}, track)
 					corner(cap, 999)
 
@@ -1059,89 +1024,89 @@ function Celestra:CreateWindow(config)
 				function Card:AddDropdown(id, opts)
 					opts = opts or {}
 					self._rowOrder = self._rowOrder + 1
-					local options  = opts.Options or {}
+					local options = opts.Options or {}
 					local selected = opts.Default or options[1] or "Select"
-					Registry[id]   = selected
+					Registry[id] = selected
 
 					local row = new("Frame", {
-						Size             = UDim2.new(1,0,0,52),
+						Size = UDim2.new(1,0,0,52),
 						BackgroundTransparency = 1,
-						BorderSizePixel  = 0,
-						LayoutOrder      = self._rowOrder,
+						BorderSizePixel = 0,
+						LayoutOrder = self._rowOrder,
 						ClipsDescendants = false,
-						ZIndex           = 10,
+						ZIndex = 10,
 					}, card)
 
 					new("TextLabel", {
-						Size               = UDim2.new(1,-70,0,20),
-						Position           = UDim2.new(0,16,0,8),
+						Size = UDim2.new(1,-70,0,20),
+						Position = UDim2.new(0,16,0,8),
 						BackgroundTransparency = 1,
-						Text               = opts.Title or id,
-						TextColor3         = Color3.fromRGB(215,215,215),
-						TextSize           = 13,
-						Font               = Enum.Font.GothamBold,
-						TextXAlignment     = Enum.TextXAlignment.Left,
-						ZIndex             = 2,
+						Text = opts.Title or id,
+						TextColor3 = Color3.fromRGB(215,215,215),
+						TextSize = 13,
+						Font = Enum.Font.GothamBold,
+						TextXAlignment = Enum.TextXAlignment.Left,
+						ZIndex = 2,
 					}, row)
 
 					new("TextLabel", {
-						Size               = UDim2.new(1,-70,0,15),
-						Position           = UDim2.new(0,16,0,30),
+						Size = UDim2.new(1,-70,0,15),
+						Position = UDim2.new(0,16,0,30),
 						BackgroundTransparency = 1,
-						Text               = opts.Desc or "",
-						TextColor3         = Color3.fromRGB(72,72,72),
-						TextSize           = 11,
-						Font               = Enum.Font.Gotham,
-						TextXAlignment     = Enum.TextXAlignment.Left,
-						ZIndex             = 2,
+						Text = opts.Desc or "",
+						TextColor3 = Color3.fromRGB(72,72,72),
+						TextSize = 11,
+						Font = Enum.Font.Gotham,
+						TextXAlignment = Enum.TextXAlignment.Left,
+						ZIndex = 2,
 					}, row)
 
 					local ddBtn = new("Frame", {
-						Size             = UDim2.new(0,130,0,32),  -- FIX: taller for touch
-						Position         = UDim2.new(1,-146,0.5,-16),
+						Size = UDim2.new(0,130,0,24),
+						Position = UDim2.new(1,-146,0.5,-12),
 						BackgroundColor3 = Color3.fromRGB(22,22,22),
-						BorderSizePixel  = 0,
-						ZIndex           = 10,
+						BorderSizePixel = 0,
+						ZIndex = 10,
 					}, row)
 					corner(ddBtn, 4)
 					local ddStroke = stroke(ddBtn, Color3.fromRGB(48,48,48), 1)
 
 					local selectedLbl = new("TextLabel", {
-						Size               = UDim2.new(1,-28,1,0),
-						Position           = UDim2.new(0,10,0,0),
+						Size = UDim2.new(1,-28,1,0),
+						Position = UDim2.new(0,10,0,0),
 						BackgroundTransparency = 1,
-						Text               = selected,
-						TextColor3         = Color3.fromRGB(175,175,175),
-						TextSize           = 12,
-						Font               = Enum.Font.Gotham,
-						TextXAlignment     = Enum.TextXAlignment.Left,
-						ZIndex             = 11,
+						Text = selected,
+						TextColor3 = Color3.fromRGB(175,175,175),
+						TextSize = 12,
+						Font = Enum.Font.Gotham,
+						TextXAlignment = Enum.TextXAlignment.Left,
+						ZIndex = 11,
 					}, ddBtn)
 
 					local arrowLbl = new("TextLabel", {
-						Size               = UDim2.new(0,20,1,0),
-						Position           = UDim2.new(1,-22,0,0),
+						Size = UDim2.new(0,20,1,0),
+						Position = UDim2.new(1,-22,0,0),
 						BackgroundTransparency = 1,
-						Text               = "▾",
-						TextColor3         = Color3.fromRGB(80,80,80),
-						TextSize           = 11,
-						Font               = Enum.Font.GothamBold,
-						ZIndex             = 11,
+						Text = "▾",
+						TextColor3 = Color3.fromRGB(80,80,80),
+						TextSize = 11,
+						Font = Enum.Font.GothamBold,
+						ZIndex = 11,
 					}, ddBtn)
 
-					local itemH  = 30  -- FIX: taller items for touch
+					local itemH = 26
 					local ddList = new("Frame", {
-						Size             = UDim2.new(0,130,0,0),
+						Size = UDim2.new(0,130,0,0),
 						BackgroundColor3 = Color3.fromRGB(20,20,20),
-						BorderSizePixel  = 0,
+						BorderSizePixel = 0,
 						ClipsDescendants = true,
-						ZIndex           = 100,
+						ZIndex = 100,
 					}, row)
 					corner(ddList, 4)
 					stroke(ddList, Color3.fromRGB(42,42,42), 1)
 					new("UIListLayout", {SortOrder=Enum.SortOrder.LayoutOrder, Padding=UDim.new(0,0)}, ddList)
 
-					local open    = false
+					local open = false
 					local targetH = #options * itemH
 
 					local function closeDropdown()
@@ -1152,89 +1117,117 @@ function Celestra:CreateWindow(config)
 						task.delay(0.22, function() if not open then ddList.Parent = row end end)
 					end
 
-					local function buildOptionsInto(list, optList)
-						for _, child in ipairs(list:GetChildren()) do
-							if child:IsA("TextButton") then child:Destroy() end
-						end
-						targetH = #optList * itemH
-						for i, opt in ipairs(optList) do
-							local optBtn = new("TextButton", {
-								Size             = UDim2.new(1,0,0,itemH),
-								BackgroundTransparency = 1,
-								BorderSizePixel  = 0,
-								Text             = "",
-								LayoutOrder      = i,
-								ZIndex           = 101,
-							}, list)
-							local optLbl = new("TextLabel", {
-								Size               = UDim2.new(1,-10,1,0),
-								Position           = UDim2.new(0,10,0,0),
-								BackgroundTransparency = 1,
-								Text               = opt,
-								TextColor3         = Color3.fromRGB(155,155,155),
-								TextSize           = 12,
-								Font               = Enum.Font.Gotham,
-								TextXAlignment     = Enum.TextXAlignment.Left,
-								ZIndex             = 102,
-							}, optBtn)
-							optBtn.MouseEnter:Connect(function()
-								tween(optBtn, {BackgroundTransparency=0, BackgroundColor3=Color3.fromRGB(28,28,28)}, 0.1)
-								optLbl.TextColor3 = Color3.fromRGB(215,215,215)
-							end)
-							optBtn.MouseLeave:Connect(function()
-								tween(optBtn, {BackgroundTransparency=1}, 0.1)
-								optLbl.TextColor3 = Color3.fromRGB(155,155,155)
-							end)
-							local function pickOpt()
-								selected = opt
-								selectedLbl.Text = opt
-								Registry[id] = opt
-								closeDropdown()
-								if opts.Callback then opts.Callback(opt) end
-							end
-							optBtn.MouseButton1Click:Connect(pickOpt)
-							optBtn.InputEnded:Connect(function(i2)
-								if i2.UserInputType == Enum.UserInputType.Touch then pickOpt() end
-							end)
-						end
+					for i, opt in ipairs(options) do
+						local optBtn = new("TextButton", {
+							Size = UDim2.new(1,0,0,itemH),
+							BackgroundTransparency = 1,
+							BorderSizePixel = 0,
+							Text = "",
+							LayoutOrder = i,
+							ZIndex = 101,
+						}, ddList)
+						local optLbl = new("TextLabel", {
+							Size = UDim2.new(1,-10,1,0),
+							Position = UDim2.new(0,10,0,0),
+							BackgroundTransparency = 1,
+							Text = opt,
+							TextColor3 = Color3.fromRGB(155,155,155),
+							TextSize = 12,
+							Font = Enum.Font.Gotham,
+							TextXAlignment = Enum.TextXAlignment.Left,
+							ZIndex = 102,
+						}, optBtn)
+						optBtn.MouseEnter:Connect(function()
+							tween(optBtn, {BackgroundTransparency=0, BackgroundColor3=Color3.fromRGB(28,28,28)}, 0.1)
+							optLbl.TextColor3 = Color3.fromRGB(215,215,215)
+						end)
+						optBtn.MouseLeave:Connect(function()
+							tween(optBtn, {BackgroundTransparency=1}, 0.1)
+							optLbl.TextColor3 = Color3.fromRGB(155,155,155)
+						end)
+						optBtn.MouseButton1Click:Connect(function()
+							selected = opt
+							selectedLbl.Text = opt
+							Registry[id] = opt
+							closeDropdown()
+							if opts.Callback then opts.Callback(opt) end
+						end)
 					end
 
-					buildOptionsInto(ddList, options)
-
 					local clickBtn = new("TextButton", {
-						Size             = UDim2.new(1,0,1,0),
+						Size = UDim2.new(1,0,1,0),
 						BackgroundTransparency = 1,
-						Text             = "",
-						ZIndex           = 12,
+						Text = "",
+						ZIndex = 12,
 					}, ddBtn)
-
-					local function openDropdown()
+					clickBtn.MouseButton1Click:Connect(function()
 						open = not open
 						if open then
-							local absPos  = ddBtn.AbsolutePosition
+							local absPos = ddBtn.AbsolutePosition
 							local absSize = ddBtn.AbsoluteSize
-							ddList.Parent   = screenGui
+							ddList.Parent = screenGui
 							ddList.Position = UDim2.new(0, absPos.X, 0, absPos.Y + absSize.Y + 4)
-							ddList.Size     = UDim2.new(0,130,0,0)
+							ddList.Size = UDim2.new(0,130,0,0)
 						end
 						tween(ddList, {Size=UDim2.new(0,130,0, open and targetH or 0)}, 0.2)
 						tween(arrowLbl, {Rotation=open and 180 or 0}, 0.18)
 						tween(ddStroke, {Color=open and Color3.fromRGB(45,100,210) or Color3.fromRGB(48,48,48)}, 0.15)
 						if not open then task.delay(0.22, function() ddList.Parent = row end) end
-					end
-					clickBtn.MouseButton1Click:Connect(openDropdown)
-					clickBtn.InputEnded:Connect(function(i)
-						if i.UserInputType == Enum.UserInputType.Touch then openDropdown() end
 					end)
+
+					local function buildOptions(optList)
+						for _, child in ipairs(ddList:GetChildren()) do
+							if child:IsA("TextButton") then child:Destroy() end
+						end
+						targetH = #optList * itemH
+						for i, opt in ipairs(optList) do
+							local optBtn2 = new("TextButton", {
+								Size = UDim2.new(1,0,0,itemH),
+								BackgroundTransparency = 1,
+								BorderSizePixel = 0,
+								Text = "",
+								LayoutOrder = i,
+								ZIndex = 101,
+							}, ddList)
+							local optLbl2 = new("TextLabel", {
+								Size = UDim2.new(1,-10,1,0),
+								Position = UDim2.new(0,10,0,0),
+								BackgroundTransparency = 1,
+								Text = opt,
+								TextColor3 = Color3.fromRGB(155,155,155),
+								TextSize = 12,
+								Font = Enum.Font.Gotham,
+								TextXAlignment = Enum.TextXAlignment.Left,
+								ZIndex = 102,
+							}, optBtn2)
+							optBtn2.MouseEnter:Connect(function()
+								tween(optBtn2, {BackgroundTransparency=0, BackgroundColor3=Color3.fromRGB(28,28,28)}, 0.1)
+								optLbl2.TextColor3 = Color3.fromRGB(215,215,215)
+							end)
+							optBtn2.MouseLeave:Connect(function()
+								tween(optBtn2, {BackgroundTransparency=1}, 0.1)
+								optLbl2.TextColor3 = Color3.fromRGB(155,155,155)
+							end)
+							optBtn2.MouseButton1Click:Connect(function()
+								selected = opt
+								selectedLbl.Text = opt
+								Registry[id] = opt
+								closeDropdown()
+								if opts.Callback then opts.Callback(opt) end
+							end)
+						end
+					end
 
 					local elem = {}
 					function elem:GetValue() return Registry[id] end
 					function elem:SetValue(v) selected = v; selectedLbl.Text = v; Registry[id] = v; if opts.Callback then opts.Callback(v) end end
 					function elem:SetOptions(newOptions)
 						closeDropdown()
-						buildOptionsInto(ddList, newOptions)
+						buildOptions(newOptions)
 						local first = newOptions[1] or ""
-						selected = first; selectedLbl.Text = first; Registry[id] = first
+						selected = first
+						selectedLbl.Text = first
+						Registry[id] = first
 					end
 					Elements[id] = elem
 					return elem
@@ -1245,51 +1238,51 @@ function Celestra:CreateWindow(config)
 					opts = opts or {}
 					self._rowOrder = self._rowOrder + 1
 					local boundKey = opts.Default or "None"
-					Registry[id]   = boundKey
+					Registry[id] = boundKey
 
 					local row = new("Frame", {
-						Size             = UDim2.new(1,0,0,52),
+						Size = UDim2.new(1,0,0,52),
 						BackgroundTransparency = 1,
-						BorderSizePixel  = 0,
-						LayoutOrder      = self._rowOrder,
-						ZIndex           = 2,
+						BorderSizePixel = 0,
+						LayoutOrder = self._rowOrder,
+						ZIndex = 2,
 					}, card)
 
 					new("TextLabel", {
-						Size               = UDim2.new(1,-160,0,20),
-						Position           = UDim2.new(0,16,0,8),
+						Size = UDim2.new(1,-160,0,20),
+						Position = UDim2.new(0,16,0,8),
 						BackgroundTransparency = 1,
-						Text               = opts.Title or id,
-						TextColor3         = Color3.fromRGB(215,215,215),
-						TextSize           = 13,
-						Font               = Enum.Font.GothamBold,
-						TextXAlignment     = Enum.TextXAlignment.Left,
-						ZIndex             = 2,
+						Text = opts.Title or id,
+						TextColor3 = Color3.fromRGB(215,215,215),
+						TextSize = 13,
+						Font = Enum.Font.GothamBold,
+						TextXAlignment = Enum.TextXAlignment.Left,
+						ZIndex = 2,
 					}, row)
 
 					new("TextLabel", {
-						Size               = UDim2.new(1,-160,0,15),
-						Position           = UDim2.new(0,16,0,30),
+						Size = UDim2.new(1,-160,0,15),
+						Position = UDim2.new(0,16,0,30),
 						BackgroundTransparency = 1,
-						Text               = opts.Desc or "",
-						TextColor3         = Color3.fromRGB(72,72,72),
-						TextSize           = 11,
-						Font               = Enum.Font.Gotham,
-						TextXAlignment     = Enum.TextXAlignment.Left,
-						ZIndex             = 2,
+						Text = opts.Desc or "",
+						TextColor3 = Color3.fromRGB(72,72,72),
+						TextSize = 11,
+						Font = Enum.Font.Gotham,
+						TextXAlignment = Enum.TextXAlignment.Left,
+						ZIndex = 2,
 					}, row)
 
 					local listening = false
 					local kbBtn = new("TextButton", {
-						Size             = UDim2.new(0,90,0,30),  -- FIX: taller for touch
-						Position         = UDim2.new(1,-106,0.5,-15),
+						Size = UDim2.new(0,90,0,24),
+						Position = UDim2.new(1,-106,0.5,-12),
 						BackgroundColor3 = Color3.fromRGB(18,18,18),
-						BorderSizePixel  = 0,
-						Text             = boundKey,
-						TextColor3       = Color3.fromRGB(160,160,160),
-						TextSize         = 11,
-						Font             = Enum.Font.GothamBold,
-						ZIndex           = 3,
+						BorderSizePixel = 0,
+						Text = boundKey,
+						TextColor3 = Color3.fromRGB(160,160,160),
+						TextSize = 11,
+						Font = Enum.Font.GothamBold,
+						ZIndex = 3,
 					}, row)
 					corner(kbBtn, 4)
 					local kbStroke = stroke(kbBtn, Color3.fromRGB(48,48,48), 1)
@@ -1330,140 +1323,174 @@ function Celestra:CreateWindow(config)
 				end
 
 				-- ── AddMobileButton ──
+				-- Creates a row in the card (like a keybind) AND spawns a small draggable
+				-- on-screen button for mobile users. On desktop the floating button is hidden.
+				-- opts.MobileTitle  — label shown on the floating button (defaults to opts.Title)
+				-- opts.Default      — initial active state (boolean, default false)
+				-- When the toggle inside the card is OFF the floating button is hidden.
+				-- When it is ON the floating button appears and its tap fires opts.Callback.
 				function Card:AddMobileButton(id, opts)
 					opts = opts or {}
 					self._rowOrder = self._rowOrder + 1
 					local active = opts.Default or false
 					Registry[id] = active
 
-					-- Card row
+					-- ── Card row (looks like a toggle) ──────────────────────────────
 					local row = new("Frame", {
-						Size             = UDim2.new(1,0,0,52),
+						Size = UDim2.new(1,0,0,52),
 						BackgroundTransparency = 1,
-						BorderSizePixel  = 0,
-						LayoutOrder      = self._rowOrder,
-						ZIndex           = 2,
+						BorderSizePixel = 0,
+						LayoutOrder = self._rowOrder,
+						ZIndex = 2,
 					}, card)
 
 					new("TextLabel", {
-						Size               = UDim2.new(1,-56,0,20),
-						Position           = UDim2.new(0,16,0,8),
+						Size = UDim2.new(1,-56,0,20),
+						Position = UDim2.new(0,16,0,8),
 						BackgroundTransparency = 1,
-						Text               = opts.Title or id,
-						TextColor3         = Color3.fromRGB(215,215,215),
-						TextSize           = 13,
-						Font               = Enum.Font.GothamBold,
-						TextXAlignment     = Enum.TextXAlignment.Left,
-						ZIndex             = 2,
+						Text = opts.Title or id,
+						TextColor3 = Color3.fromRGB(215,215,215),
+						TextSize = 13,
+						Font = Enum.Font.GothamBold,
+						TextXAlignment = Enum.TextXAlignment.Left,
+						ZIndex = 2,
 					}, row)
 
 					new("TextLabel", {
-						Size               = UDim2.new(1,-56,0,15),
-						Position           = UDim2.new(0,16,0,30),
+						Size = UDim2.new(1,-56,0,15),
+						Position = UDim2.new(0,16,0,30),
 						BackgroundTransparency = 1,
-						Text               = opts.Desc or "Tap the floating button on screen.",
-						TextColor3         = Color3.fromRGB(72,72,72),
-						TextSize           = 11,
-						Font               = Enum.Font.Gotham,
-						TextXAlignment     = Enum.TextXAlignment.Left,
-						ZIndex             = 2,
+						Text = opts.Desc or "Tap the floating button on screen.",
+						TextColor3 = Color3.fromRGB(72,72,72),
+						TextSize = 11,
+						Font = Enum.Font.Gotham,
+						TextXAlignment = Enum.TextXAlignment.Left,
+						ZIndex = 2,
 					}, row)
 
+					-- Toggle checkbox (same style as AddToggle)
 					local cb = new("TextButton", {
-						Size             = UDim2.new(0,30,0,30),  -- FIX: bigger touch target
-						Position         = UDim2.new(1,-40,0.5,-15),
+						Size = UDim2.new(0,22,0,22),
+						Position = UDim2.new(1,-36,0.5,-11),
 						BackgroundColor3 = Color3.fromRGB(14,14,14),
-						BorderSizePixel  = 0,
-						Text             = "",
-						ZIndex           = 3,
+						BorderSizePixel = 0,
+						Text = "",
+						ZIndex = 3,
 					}, row)
 					local cbs = stroke(cb, Color3.fromRGB(72,72,72), 1.5)
-					corner(cb, 4)
+					corner(cb, 3)
 
-					-- Floating button
-					local btnTitle  = opts.MobileTitle or opts.Title or id
+					-- ── Floating mobile button ──────────────────────────────────────
+					local isMobile = UserInputService.TouchEnabled and not UserInputService.MouseEnabled
 
+					local btnTitle = opts.MobileTitle or opts.Title or id
+
+					-- Outer container (for glow + button, draggable as a unit)
 					local floatHolder = new("Frame", {
-						Name              = "MobileBtn_" .. id,
-						Size              = UDim2.new(0, 0, 0, 0),
-						AutomaticSize     = Enum.AutomaticSize.XY,
-						Position          = UDim2.new(0, 24, 1, -110),
+						Name = "MobileBtn_" .. id,
+						Size = UDim2.new(0, 0, 0, 0),        -- sized by contents via AutomaticSize
+						AutomaticSize = Enum.AutomaticSize.XY,
+						Position = UDim2.new(0, 24, 1, -110), -- default: bottom-left area
 						BackgroundTransparency = 1,
-						BorderSizePixel   = 0,
-						ZIndex            = 500,
-						Visible           = active,   -- show for all devices when enabled; hides on desktop naturally
+						BorderSizePixel = 0,
+						ZIndex = 500,
+						Visible = isMobile and active,
 					}, screenGui)
 
+					-- Subtle shadow / glow behind button
 					local floatGlow = new("Frame", {
-						Size             = UDim2.new(1, 8, 1, 8),
-						Position         = UDim2.new(0,-4,0,-4),
+						Size = UDim2.new(1, 8, 1, 8),
+						Position = UDim2.new(0,-4,0,-4),
 						BackgroundColor3 = Color3.fromRGB(0,0,0),
 						BackgroundTransparency = 0.55,
-						BorderSizePixel  = 0,
-						ZIndex           = 499,
+						BorderSizePixel = 0,
+						ZIndex = 499,
 					}, floatHolder)
 					corner(floatGlow, 8)
 
+					-- The actual button
 					local floatBtn = new("TextButton", {
-						Size             = UDim2.new(0, 0, 0, 44),  -- FIX: taller for touch
-						AutomaticSize    = Enum.AutomaticSize.X,
+						Size = UDim2.new(0, 0, 0, 36),        -- width = AutomaticSize X
+						AutomaticSize = Enum.AutomaticSize.X,
 						BackgroundColor3 = Color3.fromRGB(10,10,10),
-						BorderSizePixel  = 0,
-						Text             = "",
-						ZIndex           = 501,
+						BorderSizePixel = 0,
+						Text = "",
+						ZIndex = 501,
 					}, floatHolder)
 					corner(floatBtn, 4)
 					stroke(floatBtn, Color3.fromRGB(38,38,38), 1)
 
+					-- Inner padding
 					local fp = Instance.new("UIPadding")
-					fp.PaddingLeft  = UDim.new(0,14)
-					fp.PaddingRight = UDim.new(0,14)
+					fp.PaddingLeft  = UDim.new(0,12)
+					fp.PaddingRight = UDim.new(0,12)
 					fp.Parent = floatBtn
 
+					-- Label inside float button
 					local floatLbl = new("TextLabel", {
-						Size               = UDim2.new(0,0,1,0),
-						AutomaticSize      = Enum.AutomaticSize.X,
+						Size = UDim2.new(0,0,1,0),
+						AutomaticSize = Enum.AutomaticSize.X,
 						BackgroundTransparency = 1,
-						Text               = btnTitle,
-						TextColor3         = Color3.fromRGB(200,200,200),
-						TextSize           = 13,
-						Font               = Enum.Font.GothamBold,
-						ZIndex             = 502,
+						Text = btnTitle,
+						TextColor3 = Color3.fromRGB(200,200,200),
+						TextSize = 13,
+						Font = Enum.Font.GothamBold,
+						ZIndex = 502,
 					}, floatBtn)
 
-					-- Drag the float button (mouse + touch) — FIX: proper touch drag
-					makeDraggable(floatBtn, floatHolder, nil)
+					-- ── Drag logic for floatHolder ──────────────────────────────────
+					local fDragging, fDragStart, fStartPos = false, nil, nil
 
-					-- Tap fires callback (distinguish tap from drag)
-					local tapStart    = Vector2.new(0,0)
-					local tapDragged  = false
 					floatBtn.InputBegan:Connect(function(i)
 						if i.UserInputType == Enum.UserInputType.Touch or
 						   i.UserInputType == Enum.UserInputType.MouseButton1 then
-							tapStart   = Vector2.new(i.Position.X, i.Position.Y)
-							tapDragged = false
+							fDragging = true
+							fDragStart = i.Position
+							fStartPos  = floatHolder.Position
 						end
 					end)
 					UserInputService.InputChanged:Connect(function(i)
-						if i.UserInputType == Enum.UserInputType.Touch or
-						   i.UserInputType == Enum.UserInputType.MouseMovement then
-							if (Vector2.new(i.Position.X, i.Position.Y) - tapStart).Magnitude > 12 then
-								tapDragged = true
-							end
+						if fDragging and (i.UserInputType == Enum.UserInputType.Touch or
+						                  i.UserInputType == Enum.UserInputType.MouseMovement) then
+							local d = i.Position - fDragStart
+							floatHolder.Position = UDim2.new(
+								fStartPos.X.Scale, fStartPos.X.Offset + d.X,
+								fStartPos.Y.Scale, fStartPos.Y.Offset + d.Y
+							)
 						end
 					end)
-					floatBtn.InputEnded:Connect(function(i)
-						if (i.UserInputType == Enum.UserInputType.Touch or
-						    i.UserInputType == Enum.UserInputType.MouseButton1) and not tapDragged then
-							tween(floatBtn, {BackgroundColor3=Color3.fromRGB(30,30,30)}, 0.06)
-							task.delay(0.1, function()
-								tween(floatBtn, {BackgroundColor3=Color3.fromRGB(10,10,10)}, 0.1)
-							end)
-							if opts.Callback then opts.Callback() end
+					UserInputService.InputEnded:Connect(function(i)
+						if i.UserInputType == Enum.UserInputType.Touch or
+						   i.UserInputType == Enum.UserInputType.MouseButton1 then
+							fDragging = false
 						end
 					end)
 
-					-- Checkbox controls visibility
+					-- Tap fires callback (only if not a drag)
+					local tapStart = Vector2.new(0,0)
+					floatBtn.InputBegan:Connect(function(i)
+						if i.UserInputType == Enum.UserInputType.Touch then
+							tapStart = i.Position
+						end
+					end)
+					floatBtn.InputEnded:Connect(function(i)
+						if i.UserInputType == Enum.UserInputType.Touch then
+							local dist = (i.Position - tapStart).Magnitude
+							if dist < 12 then
+								-- press flash
+								tween(floatBtn, {BackgroundColor3=Color3.fromRGB(30,30,30)}, 0.06)
+								task.delay(0.1, function()
+									tween(floatBtn, {BackgroundColor3=Color3.fromRGB(10,10,10)}, 0.1)
+								end)
+								if opts.Callback then opts.Callback() end
+							end
+						end
+					end)
+					floatBtn.MouseButton1Click:Connect(function()
+						if opts.Callback then opts.Callback() end
+					end)
+
+					-- ── Toggle checkbox controls float button visibility ─────────────
 					local function refreshMobile()
 						cbs.Color = active and Color3.fromRGB(45,110,220) or Color3.fromRGB(72,72,72)
 						cb.BackgroundColor3 = active and Color3.fromRGB(45,110,220) or Color3.fromRGB(14,14,14)
@@ -1471,20 +1498,30 @@ function Celestra:CreateWindow(config)
 					end
 					refreshMobile()
 
-					local function toggleMobile()
+					cb.MouseButton1Click:Connect(function()
 						active = not active
 						Registry[id] = active
 						refreshMobile()
-					end
-					cb.MouseButton1Click:Connect(toggleMobile)
+					end)
 					cb.InputEnded:Connect(function(i)
-						if i.UserInputType == Enum.UserInputType.Touch then toggleMobile() end
+						if i.UserInputType == Enum.UserInputType.Touch then
+							active = not active
+							Registry[id] = active
+							refreshMobile()
+						end
 					end)
 
+					-- ── Element API ──────────────────────────────────────────────────
 					local elem = {}
 					function elem:GetValue() return Registry[id] end
-					function elem:SetValue(v) active = v; Registry[id] = v; refreshMobile() end
-					function elem:SetTitle(t) floatLbl.Text = t end
+					function elem:SetValue(v)
+						active = v
+						Registry[id] = v
+						refreshMobile()
+					end
+					function elem:SetTitle(t)
+						floatLbl.Text = t
+					end
 					Elements[id] = elem
 					return elem
 				end
@@ -1495,51 +1532,52 @@ function Celestra:CreateWindow(config)
 					self._rowOrder = self._rowOrder + 1
 
 					local row = new("Frame", {
-						Size             = UDim2.new(1,0,0,52),
+						Size = UDim2.new(1,0,0,52),
 						BackgroundTransparency = 1,
-						BorderSizePixel  = 0,
-						LayoutOrder      = self._rowOrder,
-						ZIndex           = 2,
+						BorderSizePixel = 0,
+						LayoutOrder = self._rowOrder,
+						ZIndex = 2,
 					}, card)
 
 					new("TextLabel", {
-						Size               = UDim2.new(1,-120,0,20),
-						Position           = UDim2.new(0,16,0,8),
+						Size = UDim2.new(1,-120,0,20),
+						Position = UDim2.new(0,16,0,8),
 						BackgroundTransparency = 1,
-						Text               = opts.Title or id,
-						TextColor3         = Color3.fromRGB(215,215,215),
-						TextSize           = 13,
-						Font               = Enum.Font.GothamBold,
-						TextXAlignment     = Enum.TextXAlignment.Left,
-						ZIndex             = 2,
+						Text = opts.Title or id,
+						TextColor3 = Color3.fromRGB(215,215,215),
+						TextSize = 13,
+						Font = Enum.Font.GothamBold,
+						TextXAlignment = Enum.TextXAlignment.Left,
+						ZIndex = 2,
 					}, row)
 
 					new("TextLabel", {
-						Size               = UDim2.new(1,-120,0,15),
-						Position           = UDim2.new(0,16,0,30),
+						Size = UDim2.new(1,-120,0,15),
+						Position = UDim2.new(0,16,0,30),
 						BackgroundTransparency = 1,
-						Text               = opts.Desc or "",
-						TextColor3         = Color3.fromRGB(72,72,72),
-						TextSize           = 11,
-						Font               = Enum.Font.Gotham,
-						TextXAlignment     = Enum.TextXAlignment.Left,
-						ZIndex             = 2,
+						Text = opts.Desc or "",
+						TextColor3 = Color3.fromRGB(72,72,72),
+						TextSize = 11,
+						Font = Enum.Font.Gotham,
+						TextXAlignment = Enum.TextXAlignment.Left,
+						ZIndex = 2,
 					}, row)
 
 					local isDanger = opts.Danger == true
 					local btn = new("TextButton", {
-						Size             = UDim2.new(0,90,0,30),  -- FIX: taller for touch
-						Position         = UDim2.new(1,-106,0.5,-15),
+						Size = UDim2.new(0,90,0,24),
+						Position = UDim2.new(1,-106,0.5,-12),
 						BackgroundColor3 = Color3.fromRGB(22,22,22),
-						BorderSizePixel  = 0,
-						Text             = opts.ButtonText or "Execute",
-						TextColor3       = isDanger and Color3.fromRGB(210,100,100) or Color3.fromRGB(210,210,210),
-						TextSize         = 11,
-						Font             = Enum.Font.GothamBold,
-						ZIndex           = 3,
+						BorderSizePixel = 0,
+						Text = opts.ButtonText or "Execute",
+						TextColor3 = isDanger and Color3.fromRGB(210,100,100) or Color3.fromRGB(210,210,210),
+						TextSize = 11,
+						Font = Enum.Font.GothamBold,
+						ZIndex = 3,
 					}, row)
 					corner(btn, 4)
-					local btnStroke = stroke(btn, isDanger and Color3.fromRGB(90,35,35) or Color3.fromRGB(42,42,42), 1)
+					local btnStroke = stroke(btn,
+						isDanger and Color3.fromRGB(90,35,35) or Color3.fromRGB(42,42,42), 1)
 					btnStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 
 					btn.MouseEnter:Connect(function()
@@ -1553,13 +1591,9 @@ function Celestra:CreateWindow(config)
 					btn.MouseButton1Down:Connect(function()
 						tween(btn, {BackgroundColor3=Color3.fromRGB(32,32,32)}, 0.06)
 					end)
-					local function fireBtn()
+					btn.MouseButton1Up:Connect(function()
 						tween(btn, {BackgroundColor3=Color3.fromRGB(28,28,28)}, 0.06)
 						if opts.Callback then opts.Callback() end
-					end
-					btn.MouseButton1Up:Connect(fireBtn)
-					btn.InputEnded:Connect(function(i)
-						if i.UserInputType == Enum.UserInputType.Touch then fireBtn() end
 					end)
 				end
 
@@ -1569,28 +1603,28 @@ function Celestra:CreateWindow(config)
 					self._rowOrder = self._rowOrder + 1
 
 					local row = new("Frame", {
-						Size             = UDim2.new(1,0,0,36),
+						Size = UDim2.new(1,0,0,36),
 						BackgroundTransparency = 1,
-						BorderSizePixel  = 0,
-						LayoutOrder      = self._rowOrder,
-						ZIndex           = 2,
+						BorderSizePixel = 0,
+						LayoutOrder = self._rowOrder,
+						ZIndex = 2,
 					}, card)
 
 					local lbl = new("TextLabel", {
-						Size               = UDim2.new(1,-32,1,0),
-						Position           = UDim2.new(0,16,0,0),
+						Size = UDim2.new(1,-32,1,0),
+						Position = UDim2.new(0,16,0,0),
 						BackgroundTransparency = 1,
-						Text               = opts.Text or "",
-						TextColor3         = opts.Color or Color3.fromRGB(150,150,150),
-						TextSize           = opts.TextSize or 12,
-						Font               = Enum.Font.Gotham,
-						TextXAlignment     = Enum.TextXAlignment.Left,
-						TextWrapped        = true,
-						ZIndex             = 2,
+						Text = opts.Text or "",
+						TextColor3 = opts.Color or Color3.fromRGB(150,150,150),
+						TextSize = opts.TextSize or 12,
+						Font = Enum.Font.Gotham,
+						TextXAlignment = Enum.TextXAlignment.Left,
+						TextWrapped = true,
+						ZIndex = 2,
 					}, row)
 
 					local elem = {}
-					function elem:SetText(t)  lbl.Text       = t end
+					function elem:SetText(t) lbl.Text = t end
 					function elem:SetColor(c) lbl.TextColor3 = c end
 					return elem
 				end
@@ -1602,60 +1636,60 @@ function Celestra:CreateWindow(config)
 					Registry[id] = opts.Default or ""
 
 					local row = new("Frame", {
-						Size             = UDim2.new(1,0,0,58),
+						Size = UDim2.new(1,0,0,58),
 						BackgroundTransparency = 1,
-						BorderSizePixel  = 0,
-						LayoutOrder      = self._rowOrder,
-						ZIndex           = 2,
+						BorderSizePixel = 0,
+						LayoutOrder = self._rowOrder,
+						ZIndex = 2,
 					}, card)
 
 					new("TextLabel", {
-						Size               = UDim2.new(1,-56,0,18),
-						Position           = UDim2.new(0,16,0,7),
+						Size = UDim2.new(1,-56,0,18),
+						Position = UDim2.new(0,16,0,7),
 						BackgroundTransparency = 1,
-						Text               = opts.Title or id,
-						TextColor3         = Color3.fromRGB(215,215,215),
-						TextSize           = 13,
-						Font               = Enum.Font.GothamBold,
-						TextXAlignment     = Enum.TextXAlignment.Left,
-						ZIndex             = 2,
+						Text = opts.Title or id,
+						TextColor3 = Color3.fromRGB(215,215,215),
+						TextSize = 13,
+						Font = Enum.Font.GothamBold,
+						TextXAlignment = Enum.TextXAlignment.Left,
+						ZIndex = 2,
 					}, row)
 
 					new("TextLabel", {
-						Size               = UDim2.new(0.6,0,0,14),
-						Position           = UDim2.new(0,16,0,27),
+						Size = UDim2.new(0.6,0,0,14),
+						Position = UDim2.new(0,16,0,27),
 						BackgroundTransparency = 1,
-						Text               = opts.Desc or "",
-						TextColor3         = Color3.fromRGB(72,72,72),
-						TextSize           = 11,
-						Font               = Enum.Font.Gotham,
-						TextXAlignment     = Enum.TextXAlignment.Left,
-						ZIndex             = 2,
+						Text = opts.Desc or "",
+						TextColor3 = Color3.fromRGB(72,72,72),
+						TextSize = 11,
+						Font = Enum.Font.Gotham,
+						TextXAlignment = Enum.TextXAlignment.Left,
+						ZIndex = 2,
 					}, row)
 
 					local inputBox = new("Frame", {
-						Size             = UDim2.new(0,160,0,28),  -- FIX: taller for touch
-						Position         = UDim2.new(1,-176,0.5,-14),
+						Size = UDim2.new(0,160,0,22),
+						Position = UDim2.new(1,-176,0.5,-11),
 						BackgroundColor3 = Color3.fromRGB(18,18,18),
-						BorderSizePixel  = 0,
-						ZIndex           = 3,
+						BorderSizePixel = 0,
+						ZIndex = 3,
 					}, row)
 					corner(inputBox, 4)
 					local inputStroke = stroke(inputBox, Color3.fromRGB(48,48,48), 1)
 
 					local tb = new("TextBox", {
-						Size               = UDim2.new(1,-12,1,0),
-						Position           = UDim2.new(0,8,0,0),
+						Size = UDim2.new(1,-12,1,0),
+						Position = UDim2.new(0,8,0,0),
 						BackgroundTransparency = 1,
-						Text               = opts.Default or "",
-						PlaceholderText    = opts.Placeholder or "Type here...",
-						PlaceholderColor3  = Color3.fromRGB(65,65,65),
-						TextColor3         = Color3.fromRGB(200,200,200),
-						TextSize           = 12,
-						Font               = Enum.Font.Gotham,
-						TextXAlignment     = Enum.TextXAlignment.Left,
-						ClearTextOnFocus   = false,
-						ZIndex             = 4,
+						Text = opts.Default or "",
+						PlaceholderText = opts.Placeholder or "Type here...",
+						PlaceholderColor3 = Color3.fromRGB(65,65,65),
+						TextColor3 = Color3.fromRGB(200,200,200),
+						TextSize = 12,
+						Font = Enum.Font.Gotham,
+						TextXAlignment = Enum.TextXAlignment.Left,
+						ClearTextOnFocus = false,
+						ZIndex = 4,
 					}, inputBox)
 
 					tb.Focused:Connect(function()
@@ -1683,85 +1717,89 @@ function Celestra:CreateWindow(config)
 					Registry[id] = color
 
 					local row = new("Frame", {
-						Size             = UDim2.new(1,0,0,52),
+						Size = UDim2.new(1,0,0,52),
 						BackgroundTransparency = 1,
-						BorderSizePixel  = 0,
-						LayoutOrder      = self._rowOrder,
+						BorderSizePixel = 0,
+						LayoutOrder = self._rowOrder,
 						ClipsDescendants = false,
-						ZIndex           = 2,
+						ZIndex = 2,
 					}, card)
 
 					new("TextLabel", {
-						Size               = UDim2.new(1,-80,0,20),
-						Position           = UDim2.new(0,16,0,8),
+						Size = UDim2.new(1,-80,0,20),
+						Position = UDim2.new(0,16,0,8),
 						BackgroundTransparency = 1,
-						Text               = opts.Title or id,
-						TextColor3         = Color3.fromRGB(215,215,215),
-						TextSize           = 13,
-						Font               = Enum.Font.GothamBold,
-						TextXAlignment     = Enum.TextXAlignment.Left,
-						ZIndex             = 2,
+						Text = opts.Title or id,
+						TextColor3 = Color3.fromRGB(215,215,215),
+						TextSize = 13,
+						Font = Enum.Font.GothamBold,
+						TextXAlignment = Enum.TextXAlignment.Left,
+						ZIndex = 2,
 					}, row)
 
 					new("TextLabel", {
-						Size               = UDim2.new(1,-80,0,15),
-						Position           = UDim2.new(0,16,0,30),
+						Size = UDim2.new(1,-80,0,15),
+						Position = UDim2.new(0,16,0,30),
 						BackgroundTransparency = 1,
-						Text               = opts.Desc or "",
-						TextColor3         = Color3.fromRGB(72,72,72),
-						TextSize           = 11,
-						Font               = Enum.Font.Gotham,
-						TextXAlignment     = Enum.TextXAlignment.Left,
-						ZIndex             = 2,
+						Text = opts.Desc or "",
+						TextColor3 = Color3.fromRGB(72,72,72),
+						TextSize = 11,
+						Font = Enum.Font.Gotham,
+						TextXAlignment = Enum.TextXAlignment.Left,
+						ZIndex = 2,
 					}, row)
 
+					-- Color preview swatch
 					local swatch = new("TextButton", {
-						Size             = UDim2.new(0,44,0,28),  -- FIX: bigger for touch
-						Position         = UDim2.new(1,-56,0.5,-14),
+						Size = UDim2.new(0,40,0,22),
+						Position = UDim2.new(1,-56,0.5,-11),
 						BackgroundColor3 = color,
-						BorderSizePixel  = 0,
-						Text             = "",
-						ZIndex           = 3,
+						BorderSizePixel = 0,
+						Text = "",
+						ZIndex = 3,
 					}, row)
 					corner(swatch, 4)
 					stroke(swatch, Color3.fromRGB(48,48,48), 1)
 
+					-- Mini picker popup
 					local pickerOpen = false
 					local picker = new("Frame", {
-						Size             = UDim2.new(0,220,0,240),  -- FIX: slightly bigger picker
+						Size = UDim2.new(0,200,0,220),
 						BackgroundColor3 = Color3.fromRGB(18,18,18),
-						BorderSizePixel  = 0,
-						Visible          = false,
-						ZIndex           = 200,
+						BorderSizePixel = 0,
+						Visible = false,
+						ZIndex = 200,
 					}, screenGui)
 					corner(picker, 6)
 					stroke(picker, Color3.fromRGB(40,40,40), 1)
 
+					-- SV map
 					local svMap = new("ImageLabel", {
-						Size             = UDim2.new(1,-16,0,150),
-						Position         = UDim2.new(0,8,0,8),
+						Size = UDim2.new(1,-16,0,140),
+						Position = UDim2.new(0,8,0,8),
 						BackgroundColor3 = Color3.fromHSV(hue,1,1),
-						BorderSizePixel  = 0,
-						Image            = "rbxassetid://4155801252",
-						ZIndex           = 201,
+						BorderSizePixel = 0,
+						Image = "rbxassetid://4155801252",
+						ZIndex = 201,
 					}, picker)
 
 					local svCursor = new("Frame", {
-						Size             = UDim2.new(0,10,0,10),  -- FIX: bigger cursor
-						AnchorPoint      = Vector2.new(0.5,0.5),
-						Position         = UDim2.new(sat,0,1-val2,0),
+						Size = UDim2.new(0,8,0,8),
+						AnchorPoint = Vector2.new(0.5,0.5),
+						Position = UDim2.new(sat,0,1-val2,0),
 						BackgroundColor3 = Color3.new(1,1,1),
-						BorderSizePixel  = 0,
-						ZIndex           = 202,
+						BorderSizePixel = 0,
+						ZIndex = 202,
 					}, svMap)
 					corner(svCursor, 999)
 
+					-- Hue bar
 					local hueBar = new("Frame", {
-						Size             = UDim2.new(1,-16,0,18),  -- FIX: taller hue bar
-						Position         = UDim2.new(0,8,0,166),
+						Size = UDim2.new(1,-16,0,14),
+						Position = UDim2.new(0,8,0,156),
 						BackgroundColor3 = Color3.new(1,1,1),
-						BorderSizePixel  = 0,
-						ZIndex           = 201,
+						BorderSizePixel = 0,
+						ZIndex = 201,
 					}, picker)
 
 					local hueSeq = {}
@@ -1771,12 +1809,12 @@ function Celestra:CreateWindow(config)
 					new("UIGradient", {Color=ColorSequence.new(hueSeq)}, hueBar)
 
 					local hueCursor = new("Frame", {
-						Size             = UDim2.new(0,6,1,6),  -- FIX: bigger cursor
-						AnchorPoint      = Vector2.new(0.5,0.5),
-						Position         = UDim2.new(hue,0,0.5,0),
+						Size = UDim2.new(0,4,1,4),
+						AnchorPoint = Vector2.new(0.5,0.5),
+						Position = UDim2.new(hue,0,0.5,0),
 						BackgroundColor3 = Color3.new(1,1,1),
-						BorderSizePixel  = 0,
-						ZIndex           = 202,
+						BorderSizePixel = 0,
+						ZIndex = 202,
 					}, hueBar)
 					corner(hueCursor, 2)
 					stroke(hueCursor, Color3.new(0,0,0), 1)
@@ -1784,30 +1822,25 @@ function Celestra:CreateWindow(config)
 					local function updateColor()
 						color = Color3.fromHSV(hue, sat, val2)
 						swatch.BackgroundColor3 = color
-						svMap.BackgroundColor3  = Color3.fromHSV(hue,1,1)
-						svCursor.Position  = UDim2.new(sat,0,1-val2,0)
+						svMap.BackgroundColor3 = Color3.fromHSV(hue,1,1)
+						svCursor.Position = UDim2.new(sat,0,1-val2,0)
 						hueCursor.Position = UDim2.new(hue,0,0.5,0)
 						Registry[id] = color
 						if opts.Callback then opts.Callback(color) end
 					end
 
-					-- SV drag (mouse + touch)
+					-- SV drag
 					local svDragging = false
 					svMap.InputBegan:Connect(function(i)
-						if i.UserInputType == Enum.UserInputType.MouseButton1 or
-						   i.UserInputType == Enum.UserInputType.Touch then
+						if i.UserInputType == Enum.UserInputType.MouseButton1 then
 							svDragging = true
 						end
 					end)
 					UserInputService.InputEnded:Connect(function(i)
-						if i.UserInputType == Enum.UserInputType.MouseButton1 or
-						   i.UserInputType == Enum.UserInputType.Touch then
-							svDragging = false
-						end
+						if i.UserInputType == Enum.UserInputType.MouseButton1 then svDragging = false end
 					end)
 					UserInputService.InputChanged:Connect(function(i)
-						if svDragging and (i.UserInputType == Enum.UserInputType.MouseMovement or
-						                   i.UserInputType == Enum.UserInputType.Touch) then
+						if svDragging and i.UserInputType == Enum.UserInputType.MouseMovement then
 							local rx = math.clamp((i.Position.X - svMap.AbsolutePosition.X) / svMap.AbsoluteSize.X, 0, 1)
 							local ry = math.clamp((i.Position.Y - svMap.AbsolutePosition.Y) / svMap.AbsoluteSize.Y, 0, 1)
 							sat = rx; val2 = 1 - ry
@@ -1815,44 +1848,34 @@ function Celestra:CreateWindow(config)
 						end
 					end)
 
-					-- Hue drag (mouse + touch)
+					-- Hue drag
 					local hueDragging = false
 					hueBar.InputBegan:Connect(function(i)
-						if i.UserInputType == Enum.UserInputType.MouseButton1 or
-						   i.UserInputType == Enum.UserInputType.Touch then
+						if i.UserInputType == Enum.UserInputType.MouseButton1 then
 							hueDragging = true
 						end
 					end)
 					UserInputService.InputEnded:Connect(function(i)
-						if i.UserInputType == Enum.UserInputType.MouseButton1 or
-						   i.UserInputType == Enum.UserInputType.Touch then
-							hueDragging = false
-						end
+						if i.UserInputType == Enum.UserInputType.MouseButton1 then hueDragging = false end
 					end)
 					UserInputService.InputChanged:Connect(function(i)
-						if hueDragging and (i.UserInputType == Enum.UserInputType.MouseMovement or
-						                    i.UserInputType == Enum.UserInputType.Touch) then
+						if hueDragging and i.UserInputType == Enum.UserInputType.MouseMovement then
 							hue = math.clamp((i.Position.X - hueBar.AbsolutePosition.X) / hueBar.AbsoluteSize.X, 0, 1)
 							updateColor()
 						end
 					end)
 
-					local function openPicker()
+					swatch.MouseButton1Click:Connect(function()
 						pickerOpen = not pickerOpen
 						picker.Visible = pickerOpen
 						if pickerOpen then
 							local ap = swatch.AbsolutePosition
-							picker.Position = UDim2.new(0, ap.X - 170, 0, ap.Y + 36)
+							picker.Position = UDim2.new(0, ap.X - 160, 0, ap.Y + 30)
 						end
-					end
-					swatch.MouseButton1Click:Connect(openPicker)
-					swatch.InputEnded:Connect(function(i)
-						if i.UserInputType == Enum.UserInputType.Touch then openPicker() end
 					end)
 
 					UserInputService.InputBegan:Connect(function(i)
-						if (i.UserInputType == Enum.UserInputType.MouseButton1 or
-						    i.UserInputType == Enum.UserInputType.Touch) and pickerOpen then
+						if i.UserInputType == Enum.UserInputType.MouseButton1 and pickerOpen then
 							local ap = picker.AbsolutePosition
 							local as = picker.AbsoluteSize
 							local mx, my = i.Position.X, i.Position.Y
@@ -1878,11 +1901,11 @@ function Celestra:CreateWindow(config)
 				function Card:AddDivider()
 					self._rowOrder = self._rowOrder + 1
 					new("Frame", {
-						Size             = UDim2.new(1,-32,0,1),
+						Size = UDim2.new(1,-32,0,1),
 						BackgroundColor3 = Color3.fromRGB(28,28,28),
-						BorderSizePixel  = 0,
-						LayoutOrder      = self._rowOrder,
-						ZIndex           = 2,
+						BorderSizePixel = 0,
+						LayoutOrder = self._rowOrder,
+						ZIndex = 2,
 					}, card)
 				end
 
@@ -1895,14 +1918,22 @@ function Celestra:CreateWindow(config)
 		return Category
 	end -- AddCategory
 
-	-- Global getters
-	function Window:GetValue(id)   return Registry[id]  end
-	function Window:GetElement(id) return Elements[id]  end
-	function Window:Destroy()      screenGui:Destroy()  end
+	-- Global getter
+	function Window:GetValue(id)
+		return Registry[id]
+	end
 
-	-- Expose internals for SaveManager
-	Window._elements = Elements
-	Window._registry = Registry
+	function Window:GetElement(id)
+		return Elements[id]
+	end
+
+	function Window:Destroy()
+		screenGui:Destroy()
+	end
+
+-- expose internals for SaveManager
+Window._elements = Elements
+Window._registry = Registry
 
 	return Window
 end
