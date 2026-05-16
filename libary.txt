@@ -142,7 +142,9 @@ function Celestra:CreateWindow(config)
 
 	-- Drag logic
 	local dragging, dragStart, startPos, dragInput
+	local dragLocked = false   -- when true, title bar drag is disabled
 	local function updateDrag(input)
+		if dragLocked then return end
 		local scale = uiScale.Scale > 0 and uiScale.Scale or 1
 		local d = (input.Position - dragStart) / scale
 		local np = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
@@ -168,6 +170,7 @@ function Celestra:CreateWindow(config)
 
 	-- Drag on title bar (Mouse + Touch)
 	titleBar.InputBegan:Connect(function(i)
+		if dragLocked then return end
 		if i.UserInputType == Enum.UserInputType.MouseButton1 or
 		   i.UserInputType == Enum.UserInputType.Touch then
 			dragging = true
@@ -282,8 +285,9 @@ function Celestra:CreateWindow(config)
 	end)
 
 	-- ── Sidebar ──
+	local sbW = isTouchOnly and 215 or 175   -- wider on mobile so page names aren't clipped
 	local sidebar = new("Frame", {
-		Size = UDim2.new(0, 175, 1, -46 - 28),
+		Size = UDim2.new(0, sbW, 1, -46 - 28),
 		Position = UDim2.new(0, 0, 0, 46),
 		BackgroundColor3 = Color3.fromRGB(12,12,12),
 		BorderSizePixel = 0,
@@ -319,8 +323,8 @@ function Celestra:CreateWindow(config)
 
 	-- ── Content Area ──
 	local contentArea = new("Frame", {
-		Size = UDim2.new(1, -175, 1, -46 - 28),
-		Position = UDim2.new(0, 175, 0, 46),
+		Size = UDim2.new(1, -sbW, 1, -46 - 28),
+		Position = UDim2.new(0, sbW, 0, 46),
 		BackgroundColor3 = Color3.fromRGB(15,15,15),
 		BorderSizePixel = 0,
 		ClipsDescendants = true,
@@ -625,8 +629,9 @@ function Celestra:CreateWindow(config)
 			local page = makePage(pageKey)
 
 			-- Sidebar item
+			local sbBtnH = isTouchOnly and 38 or 28
 			local btn = new("TextButton", {
-				Size = UDim2.new(1,0,0,28),
+				Size = UDim2.new(1,0,0,sbBtnH),
 				BackgroundTransparency = 1,
 				BorderSizePixel = 0,
 				Text = "",
@@ -635,14 +640,15 @@ function Celestra:CreateWindow(config)
 			}, subContainer)
 
 			local lbl = new("TextLabel", {
-				Size = UDim2.new(1,-20,1,0),
-				Position = UDim2.new(0,28,0,0),
+				Size = UDim2.new(1,-8,1,0),   -- near full width so text never clips
+				Position = UDim2.new(0, isTouchOnly and 14 or 28, 0, 0),
 				BackgroundTransparency = 1,
 				Text = label,
 				TextColor3 = Color3.fromRGB(105,105,105),
-				TextSize = 13,
+				TextSize = isTouchOnly and 15 or 13,
 				Font = Enum.Font.Gotham,
 				TextXAlignment = Enum.TextXAlignment.Left,
+				TextTruncate = Enum.TextTruncate.None,
 				ZIndex = 2,
 			}, btn)
 
@@ -1395,20 +1401,20 @@ function Celestra:CreateWindow(config)
 
 					-- The actual button
 					local floatBtn = new("TextButton", {
-						Size = UDim2.new(0, 0, 0, 36),        -- width = AutomaticSize X
+						Size = UDim2.new(0, 0, 0, isMobile and 54 or 36),
 						AutomaticSize = Enum.AutomaticSize.X,
 						BackgroundColor3 = Color3.fromRGB(10,10,10),
 						BorderSizePixel = 0,
 						Text = "",
 						ZIndex = 501,
 					}, floatHolder)
-					corner(floatBtn, 4)
+					corner(floatBtn, isMobile and 8 or 4)
 					stroke(floatBtn, Color3.fromRGB(38,38,38), 1)
 
 					-- Inner padding
 					local fp = Instance.new("UIPadding")
-					fp.PaddingLeft  = UDim.new(0,12)
-					fp.PaddingRight = UDim.new(0,12)
+					fp.PaddingLeft  = UDim.new(0, isMobile and 20 or 12)
+					fp.PaddingRight = UDim.new(0, isMobile and 20 or 12)
 					fp.Parent = floatBtn
 
 					-- Label inside float button
@@ -1418,7 +1424,7 @@ function Celestra:CreateWindow(config)
 						BackgroundTransparency = 1,
 						Text = btnTitle,
 						TextColor3 = Color3.fromRGB(200,200,200),
-						TextSize = 13,
+						TextSize = isMobile and 18 or 13,
 						Font = Enum.Font.GothamBold,
 						ZIndex = 502,
 					}, floatBtn)
@@ -1922,6 +1928,90 @@ function Celestra:CreateWindow(config)
 		return Category
 	end -- AddCategory
 
+
+	-- ── Mobile drag-lock toggle (only shown on touch devices) ──────────────
+	if isTouchOnly then
+		local lockHolder = new("Frame", {
+			Name = "DragLockHolder",
+			Size = UDim2.new(0,0,0,0),
+			AutomaticSize = Enum.AutomaticSize.XY,
+			Position = UDim2.new(1,-24,0,60),  -- top-right of screen, below title
+			AnchorPoint = Vector2.new(1,0),
+			BackgroundTransparency = 1,
+			BorderSizePixel = 0,
+			ZIndex = 600,
+		}, screenGui)
+
+		local lockBtn = new("TextButton", {
+			Size = UDim2.new(0,0,0,44),
+			AutomaticSize = Enum.AutomaticSize.X,
+			BackgroundColor3 = Color3.fromRGB(14,14,14),
+			BorderSizePixel = 0,
+			Text = "",
+			ZIndex = 601,
+		}, lockHolder)
+		corner(lockBtn, 8)
+		local lockStroke = stroke(lockBtn, Color3.fromRGB(42,42,42), 1)
+
+		local lockPad = Instance.new("UIPadding")
+		lockPad.PaddingLeft  = UDim.new(0,14)
+		lockPad.PaddingRight = UDim.new(0,14)
+		lockPad.Parent = lockBtn
+
+		local lockIcon = new("TextLabel", {
+			Size = UDim2.new(0,0,1,0),
+			AutomaticSize = Enum.AutomaticSize.X,
+			BackgroundTransparency = 1,
+			Text = "🔓 Unlocked",
+			TextColor3 = Color3.fromRGB(100,200,100),
+			TextSize = 16,
+			Font = Enum.Font.GothamBold,
+			ZIndex = 602,
+		}, lockBtn)
+
+		-- Draggable lock button itself
+		local lkDragging, lkDragStart, lkStartPos = false, nil, nil
+		lockBtn.InputBegan:Connect(function(i)
+			if i.UserInputType == Enum.UserInputType.Touch then
+				lkDragging = true
+				lkDragStart = Vector2.new(i.Position.X, i.Position.Y)
+				lkStartPos  = lockHolder.Position
+			end
+		end)
+		UserInputService.InputChanged:Connect(function(i)
+			if lkDragging and i.UserInputType == Enum.UserInputType.Touch then
+				local scale = uiScale.Scale > 0 and uiScale.Scale or 1
+				local d = (Vector2.new(i.Position.X, i.Position.Y) - lkDragStart) / scale
+				lockHolder.Position = UDim2.new(
+					lkStartPos.X.Scale, lkStartPos.X.Offset + d.X,
+					lkStartPos.Y.Scale, lkStartPos.Y.Offset + d.Y
+				)
+			end
+		end)
+		UserInputService.InputEnded:Connect(function(i)
+			if i.UserInputType == Enum.UserInputType.Touch then
+				-- only toggle lock if it was a tap (not a drag)
+				if lkDragging and lkDragStart then
+					local dist = (Vector2.new(i.Position.X, i.Position.Y) - lkDragStart).Magnitude
+					if dist < 12 then
+						dragLocked = not dragLocked
+						if dragLocked then
+							lockIcon.Text = "🔒 Locked"
+							lockIcon.TextColor3 = Color3.fromRGB(220,100,100)
+							tween(lockBtn, {BackgroundColor3=Color3.fromRGB(40,14,14)}, 0.15)
+							tween(lockStroke, {Color=Color3.fromRGB(100,35,35)}, 0.15)
+						else
+							lockIcon.Text = "🔓 Unlocked"
+							lockIcon.TextColor3 = Color3.fromRGB(100,200,100)
+							tween(lockBtn, {BackgroundColor3=Color3.fromRGB(14,14,14)}, 0.15)
+							tween(lockStroke, {Color=Color3.fromRGB(42,42,42)}, 0.15)
+						end
+					end
+				end
+				lkDragging = false
+			end
+		end)
+	end
 	-- Global getter
 	function Window:GetValue(id)
 		return Registry[id]
