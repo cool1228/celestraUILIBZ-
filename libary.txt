@@ -592,6 +592,7 @@ function Celestra:CreateWindow(config)
 		local subContainer = new("Frame", {
 			BackgroundTransparency = 1,
 			BorderSizePixel = 0,
+			Size = UDim2.new(1,0,0,0),
 			LayoutOrder = lo + 0.5,
 			ZIndex = 2,
 			ClipsDescendants = true,
@@ -600,9 +601,12 @@ function Celestra:CreateWindow(config)
 		local subLayout = new("UIListLayout", {SortOrder=Enum.SortOrder.LayoutOrder, Padding=UDim.new(0,0)}, subContainer)
 
 		local expanded = true
-		subLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-			subContainer.Size = UDim2.new(1,0,0, expanded and subLayout.AbsoluteContentSize.Y or 0)
-		end)
+		local function updateSubSize()
+			task.defer(function()
+				subContainer.Size = UDim2.new(1,0,0, expanded and subLayout.AbsoluteContentSize.Y or 0)
+			end)
+		end
+		subLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(updateSubSize)
 
 		local catBtn = new("TextButton", {
 			Size = UDim2.new(1,0,1,0),
