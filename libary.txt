@@ -595,14 +595,18 @@ function Celestra:CreateWindow(config)
 			ZIndex = 2,
 			ClipsDescendants = true,
 			Size = UDim2.new(1, 0, 0, 0),
-			AutomaticSize = Enum.AutomaticSize.Y,
 		}, sbScroll)
 
 		local subLayout = new("UIListLayout", {SortOrder=Enum.SortOrder.LayoutOrder, Padding=UDim.new(0,0)}, subContainer)
 
 		local expanded = true
-		-- Refresh sidebar canvas whenever pages are added
+		-- Track full height so we can restore it on expand
+		local fullHeight = 0
 		subLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+			if expanded then
+				fullHeight = subLayout.AbsoluteContentSize.Y
+				subContainer.Size = UDim2.new(1, 0, 0, fullHeight)
+			end
 			task.defer(function()
 				sbScroll.CanvasSize = UDim2.new(0, 0, 0, sbLayout.AbsoluteContentSize.Y + 12)
 			end)
@@ -618,13 +622,20 @@ function Celestra:CreateWindow(config)
 			expanded = not expanded
 			arrow.Text = expanded and "−" or "+"
 			if expanded then
-				-- Re-enable AutomaticSize so all pages show again
-				subContainer.AutomaticSize = Enum.AutomaticSize.Y
-				subContainer.Size = UDim2.new(1, 0, 0, 0)
+				-- Show all page buttons and restore height
+				for _, child in ipairs(subContainer:GetChildren()) do
+					if child:IsA("TextButton") then child.Visible = true end
+				end
+				tween(subContainer, {Size=UDim2.new(1,0,0,fullHeight)}, 0.2)
 			else
-				-- Collapse: disable AutomaticSize then tween to 0
-				subContainer.AutomaticSize = Enum.AutomaticSize.None
+				-- Collapse: tween to 0 then hide children so they cant be tapped
+				fullHeight = subLayout.AbsoluteContentSize.Y
 				tween(subContainer, {Size=UDim2.new(1,0,0,0)}, 0.2)
+				task.delay(0.21, function()
+					for _, child in ipairs(subContainer:GetChildren()) do
+						if child:IsA("TextButton") then child.Visible = false end
+					end
+				end)
 			end
 			task.delay(0.22, function()
 				sbScroll.CanvasSize = UDim2.new(0, 0, 0, sbLayout.AbsoluteContentSize.Y + 12)
