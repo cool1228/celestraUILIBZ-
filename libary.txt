@@ -592,21 +592,20 @@ function Celestra:CreateWindow(config)
 			BorderSizePixel = 0,
 			LayoutOrder = lo + 0.5,
 			ZIndex = 2,
-			ClipsDescendants = true,
+			ClipsDescendants = false,
+			Size = UDim2.new(1, 0, 0, 0),
+			AutomaticSize = Enum.AutomaticSize.Y,
 		}, sbScroll)
 
 		local subLayout = new("UIListLayout", {SortOrder=Enum.SortOrder.LayoutOrder, Padding=UDim.new(0,0)}, subContainer)
 
 		local expanded = true
-		local function updateSubSize()
-			local h = expanded and subLayout.AbsoluteContentSize.Y or 0
-			subContainer.Size = UDim2.new(1, 0, 0, h)
-			-- Refresh sidebar canvas so all pages are always reachable
+		-- Refresh sidebar canvas whenever pages are added
+		subLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
 			task.defer(function()
 				sbScroll.CanvasSize = UDim2.new(0, 0, 0, sbLayout.AbsoluteContentSize.Y + 12)
 			end)
-		end
-		subLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(updateSubSize)
+		end)
 
 		local catBtn = new("TextButton", {
 			Size = UDim2.new(1,0,1,0),
@@ -617,9 +616,15 @@ function Celestra:CreateWindow(config)
 		catBtn.MouseButton1Click:Connect(function()
 			expanded = not expanded
 			arrow.Text = expanded and "−" or "+"
-			local targetH = expanded and subLayout.AbsoluteContentSize.Y or 0
-			tween(subContainer, {Size=UDim2.new(1,0,0,targetH)}, 0.2)
-			-- Update canvas so the sidebar scrolls to show all items
+			if expanded then
+				-- Re-enable AutomaticSize so all pages show again
+				subContainer.AutomaticSize = Enum.AutomaticSize.Y
+				subContainer.Size = UDim2.new(1, 0, 0, 0)
+			else
+				-- Collapse: disable AutomaticSize then tween to 0
+				subContainer.AutomaticSize = Enum.AutomaticSize.None
+				tween(subContainer, {Size=UDim2.new(1,0,0,0)}, 0.2)
+			end
 			task.delay(0.22, function()
 				sbScroll.CanvasSize = UDim2.new(0, 0, 0, sbLayout.AbsoluteContentSize.Y + 12)
 			end)
