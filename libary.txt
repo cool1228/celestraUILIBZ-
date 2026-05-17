@@ -703,6 +703,21 @@ function Celestra:CreateWindow(config)
 			local ref = {btn=btn, lbl=lbl, ul=ul, ulGlow=ulGlow, key=pageKey}
 			table.insert(sbItemRefs, ref)
 
+			-- Immediately resize subContainer to fit all page buttons so far
+			-- (AbsoluteContentSize fires async; this guarantees correct size on first frame)
+			do
+				local count = 0
+				for _, c in ipairs(subContainer:GetChildren()) do
+					if c:IsA("TextButton") then count = count + 1 end
+				end
+				local h = count * sbBtnH
+				fullHeight = h
+				subContainer.Size = UDim2.new(1, 0, 0, h)
+				task.defer(function()
+					sbScroll.CanvasSize = UDim2.new(0, 0, 0, sbLayout.AbsoluteContentSize.Y + 12)
+				end)
+			end
+
 			btn.MouseButton1Click:Connect(function()
 				for _, r in ipairs(sbItemRefs) do
 					tween(r.lbl, {TextColor3=Color3.fromRGB(105,105,105)}, 0.12)
