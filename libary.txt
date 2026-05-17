@@ -1489,7 +1489,7 @@ function Celestra:CreateWindow(config)
 					end)
 					-- Track on UIS so we never lose the event even if finger drifts off button
 					UserInputService.InputChanged:Connect(function(i)
-						if fDragging and (i.UserInputType == Enum.UserInputType.Touch or
+						if fDragging and not dragLocked and (i.UserInputType == Enum.UserInputType.Touch or
 						                  i.UserInputType == Enum.UserInputType.MouseMovement) then
 							local scale = uiScale.Scale > 0 and uiScale.Scale or 1
 							local d = (Vector2.new(i.Position.X, i.Position.Y) - fDragStart) / scale
