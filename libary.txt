@@ -143,7 +143,6 @@ function Celestra:CreateWindow(config)
 	-- Drag logic
 	local dragging, dragStart, startPos, dragInput
 	local dragLocked = false   -- when true, title bar drag is disabled
-	local mobileBtnsLocked = false  -- when true, floating mobile buttons cannot be dragged
 	local function updateDrag(input)
 		if dragLocked then return end
 		local scale = uiScale.Scale > 0 and uiScale.Scale or 1
@@ -307,17 +306,16 @@ function Celestra:CreateWindow(config)
 		Size = UDim2.new(1, -1, 1, 0),
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
-		ScrollBarThickness = isTouchOnly and 2 or 0,
-		ScrollBarImageColor3 = Color3.fromRGB(55,55,55),
+		ScrollBarThickness = 0,
 		ScrollingEnabled = true,
 		ScrollingDirection = Enum.ScrollingDirection.Y,
-		ElasticBehavior = Enum.ElasticBehavior.WhenScrollable,
+		ElasticBehavior = Enum.ElasticBehavior.Never,
 		CanvasSize = UDim2.new(0,0,0,0),
 		Active = true,
 		ZIndex = 2,
 	}, sidebar)
 
-	local sbLayout = new("UIListLayout", {SortOrder=Enum.SortOrder.LayoutOrder, Padding=UDim.new(0, isTouchOnly and 10 or 0)}, sbScroll)
+	local sbLayout = new("UIListLayout", {SortOrder=Enum.SortOrder.LayoutOrder, Padding=UDim.new(0,0)}, sbScroll)
 	sbLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
 		sbScroll.CanvasSize = UDim2.new(0,0,0,sbLayout.AbsoluteContentSize.Y)
 	end)
@@ -592,7 +590,6 @@ function Celestra:CreateWindow(config)
 		local subContainer = new("Frame", {
 			BackgroundTransparency = 1,
 			BorderSizePixel = 0,
-			Size = UDim2.new(1,0,0,0),
 			LayoutOrder = lo + 0.5,
 			ZIndex = 2,
 			ClipsDescendants = true,
@@ -602,10 +599,11 @@ function Celestra:CreateWindow(config)
 
 		local expanded = true
 		local function updateSubSize()
+			local h = expanded and subLayout.AbsoluteContentSize.Y or 0
+			subContainer.Size = UDim2.new(1, 0, 0, h)
+			-- Refresh sidebar canvas so all pages are always reachable
 			task.defer(function()
-				local h = expanded and subLayout.AbsoluteContentSize.Y or 0
-				subContainer.Size = UDim2.new(1,0,0,h)
-				sbScroll.CanvasSize = UDim2.new(0,0,0,sbLayout.AbsoluteContentSize.Y)
+				sbScroll.CanvasSize = UDim2.new(0, 0, 0, sbLayout.AbsoluteContentSize.Y + 12)
 			end)
 		end
 		subLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(updateSubSize)
@@ -621,6 +619,10 @@ function Celestra:CreateWindow(config)
 			arrow.Text = expanded and "−" or "+"
 			local targetH = expanded and subLayout.AbsoluteContentSize.Y or 0
 			tween(subContainer, {Size=UDim2.new(1,0,0,targetH)}, 0.2)
+			-- Update canvas so the sidebar scrolls to show all items
+			task.delay(0.22, function()
+				sbScroll.CanvasSize = UDim2.new(0, 0, 0, sbLayout.AbsoluteContentSize.Y + 12)
+			end)
 		end)
 
 		-- Category object
@@ -653,7 +655,7 @@ function Celestra:CreateWindow(config)
 				BackgroundTransparency = 1,
 				Text = label,
 				TextColor3 = Color3.fromRGB(105,105,105),
-				TextSize = isTouchOnly and 14 or 13,
+				TextSize = isTouchOnly and 15 or 13,
 				Font = Enum.Font.Gotham,
 				TextXAlignment = Enum.TextXAlignment.Left,
 				TextTruncate = Enum.TextTruncate.None,
@@ -1441,7 +1443,6 @@ function Celestra:CreateWindow(config)
 					local fDragging, fDragStart, fStartPos = false, nil, nil
 
 					floatBtn.InputBegan:Connect(function(i)
-						if mobileBtnsLocked then return end
 						if i.UserInputType == Enum.UserInputType.Touch or
 						   i.UserInputType == Enum.UserInputType.MouseButton1 then
 							fDragging  = true
@@ -1451,7 +1452,7 @@ function Celestra:CreateWindow(config)
 					end)
 					-- Track on UIS so we never lose the event even if finger drifts off button
 					UserInputService.InputChanged:Connect(function(i)
-						if fDragging and not mobileBtnsLocked and (i.UserInputType == Enum.UserInputType.Touch or
+						if fDragging and (i.UserInputType == Enum.UserInputType.Touch or
 						                  i.UserInputType == Enum.UserInputType.MouseMovement) then
 							local scale = uiScale.Scale > 0 and uiScale.Scale or 1
 							local d = (Vector2.new(i.Position.X, i.Position.Y) - fDragStart) / scale
@@ -2003,8 +2004,8 @@ function Celestra:CreateWindow(config)
 				if lkDragging and lkDragStart then
 					local dist = (Vector2.new(i.Position.X, i.Position.Y) - lkDragStart).Magnitude
 					if dist < 12 then
-						mobileBtnsLocked = not mobileBtnsLocked
-						if mobileBtnsLocked then
+						dragLocked = not dragLocked
+						if dragLocked then
 							lockIcon.Text = "🔒 Locked"
 							lockIcon.TextColor3 = Color3.fromRGB(220,100,100)
 							tween(lockBtn, {BackgroundColor3=Color3.fromRGB(40,14,14)}, 0.15)
