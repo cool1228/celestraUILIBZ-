@@ -647,7 +647,7 @@ function Celestra:CreateWindow(config)
 				BackgroundTransparency = 1,
 				Text = label,
 				TextColor3 = Color3.fromRGB(105,105,105),
-				TextSize = isTouchOnly and 22 or 13,
+				TextSize = isTouchOnly and 14 or 13,
 				Font = Enum.Font.Gotham,
 				TextXAlignment = Enum.TextXAlignment.Left,
 				TextTruncate = Enum.TextTruncate.None,
