@@ -287,7 +287,7 @@ function Celestra:CreateWindow(config)
 	end)
 
 	-- ── Sidebar ──
-	local sbW = isTouchOnly and 230 or 175   -- wider on mobile so page names aren't clipped
+	local sbW = isTouchOnly and 272 or 175   -- wider on mobile so page names aren't clipped
 	local sidebar = new("Frame", {
 		Size = UDim2.new(0, sbW, 1, -46 - 28),
 		Position = UDim2.new(0, 0, 0, 46),
@@ -560,7 +560,7 @@ function Celestra:CreateWindow(config)
 		local lo = self._categoryOrder * 2
 
 		local catFrame = new("Frame", {
-			Size = UDim2.new(1,0,0,30),
+			Size = UDim2.new(1,0,0, isTouchOnly and 40 or 30),
 			BackgroundTransparency = 1,
 			BorderSizePixel = 0,
 			LayoutOrder = lo,
@@ -573,7 +573,7 @@ function Celestra:CreateWindow(config)
 			BackgroundTransparency = 1,
 			Text = label:upper(),
 			TextColor3 = Color3.fromRGB(130,130,130),
-			TextSize = 11,
+			TextSize = isTouchOnly and 18 or 11,
 			Font = Enum.Font.GothamBold,
 			TextXAlignment = Enum.TextXAlignment.Left,
 			ZIndex = 2,
@@ -585,7 +585,7 @@ function Celestra:CreateWindow(config)
 			BackgroundTransparency = 1,
 			Text = "−",
 			TextColor3 = Color3.fromRGB(60,60,60),
-			TextSize = 14,
+			TextSize = isTouchOnly and 20 or 14,
 			Font = Enum.Font.GothamBold,
 			ZIndex = 2,
 		}, catFrame)
@@ -632,7 +632,7 @@ function Celestra:CreateWindow(config)
 			local page = makePage(pageKey)
 
 			-- Sidebar item
-			local sbBtnH = isTouchOnly and 44 or 28
+			local sbBtnH = isTouchOnly and 52 or 28
 			local btn = new("TextButton", {
 				Size = UDim2.new(1,0,0,sbBtnH),
 				BackgroundTransparency = 1,
@@ -643,12 +643,12 @@ function Celestra:CreateWindow(config)
 			}, subContainer)
 
 			local lbl = new("TextLabel", {
-				Size = UDim2.new(1, isTouchOnly and -18 or -36, 1, 0),   -- leave room on right for indent
+				Size = UDim2.new(1, isTouchOnly and -20 or -36, 1, 0),
 				Position = UDim2.new(0, isTouchOnly and 14 or 28, 0, 0),
 				BackgroundTransparency = 1,
 				Text = label,
 				TextColor3 = Color3.fromRGB(105,105,105),
-				TextSize = isTouchOnly and 13 or 13,
+				TextSize = isTouchOnly and 22 or 13,
 				Font = Enum.Font.Gotham,
 				TextXAlignment = Enum.TextXAlignment.Left,
 				TextTruncate = Enum.TextTruncate.None,
@@ -2004,9 +2004,8 @@ function Celestra:CreateWindow(config)
 				if lkDragging and lkDragStart then
 					local dist = (Vector2.new(i.Position.X, i.Position.Y) - lkDragStart).Magnitude
 					if dist < 12 then
-						dragLocked = not dragLocked
-						_mobileLockState.locked = dragLocked
-						if dragLocked then
+						_mobileLockState.locked = not _mobileLockState.locked
+						if _mobileLockState.locked then
 							lockIcon.Text = "🔒 Locked"
 							lockIcon.TextColor3 = Color3.fromRGB(220,100,100)
 							tween(lockBtn, {BackgroundColor3=Color3.fromRGB(40,14,14)}, 0.15)
