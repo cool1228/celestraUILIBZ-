@@ -593,6 +593,7 @@ function Celestra:CreateWindow(config)
 		local subContainer = new("Frame", {
 			BackgroundTransparency = 1,
 			BorderSizePixel = 0,
+			Size = UDim2.new(1,0,0,0),
 			LayoutOrder = lo + 0.5,
 			ZIndex = 2,
 			ClipsDescendants = true,
@@ -601,9 +602,13 @@ function Celestra:CreateWindow(config)
 		local subLayout = new("UIListLayout", {SortOrder=Enum.SortOrder.LayoutOrder, Padding=UDim.new(0,0)}, subContainer)
 
 		local expanded = true
-		subLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-			subContainer.Size = UDim2.new(1,0,0, expanded and subLayout.AbsoluteContentSize.Y or 0)
-		end)
+		local function refreshSubSize()
+			task.defer(function()
+				local h = expanded and subLayout.AbsoluteContentSize.Y or 0
+				subContainer.Size = UDim2.new(1,0,0,h)
+			end)
+		end
+		subLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(refreshSubSize)
 
 		local catBtn = new("TextButton", {
 			Size = UDim2.new(1,0,1,0),
@@ -643,69 +648,71 @@ function Celestra:CreateWindow(config)
 			}, subContainer)
 
 			local lbl = new("TextLabel", {
-				Size = UDim2.new(1, isTouchOnly and -20 or -36, 1, 0),
-				Position = UDim2.new(0, isTouchOnly and 14 or 28, 0, 0),
+				Size = UDim2.new(1, isTouchOnly and -24 or -36, 1, 0),
+				Position = UDim2.new(0, isTouchOnly and 20 or 28, 0, 0),
 				BackgroundTransparency = 1,
 				Text = label,
-				TextColor3 = Color3.fromRGB(105,105,105),
+				TextColor3 = Color3.fromRGB(140,140,140),
 				TextSize = isTouchOnly and 22 or 13,
 				Font = Enum.Font.Gotham,
 				TextXAlignment = Enum.TextXAlignment.Left,
 				TextTruncate = Enum.TextTruncate.None,
 				TextWrapped = false,
-				ZIndex = 2,
+				ZIndex = 3,
 			}, btn)
 
-			local ulGlow = new("Frame", {
-				Size = UDim2.new(0,22,0,4),
-				Position = UDim2.new(0,27,1,-5),
-				BackgroundColor3 = Color3.fromRGB(45,110,220),
-				BackgroundTransparency = 0.65,
-				BorderSizePixel = 0,
-				Visible = false,
-				ZIndex = 2,
-			}, btn)
-			corner(ulGlow, 999)
-
-			local ul = new("Frame", {
-				Size = UDim2.new(0,20,0,2),
-				Position = UDim2.new(0,28,1,-4),
+			-- Active indicator: left accent bar (much more visible than bottom underline)
+			local accentBar = new("Frame", {
+				Size = UDim2.new(0, isTouchOnly and 4 or 3, isTouchOnly and 0.55 or 0.5, 0),
+				Position = UDim2.new(0, isTouchOnly and 6 or 8, 0.5, 0),
+				AnchorPoint = Vector2.new(0, 0.5),
 				BackgroundColor3 = Color3.fromRGB(60,130,240),
 				BorderSizePixel = 0,
 				Visible = false,
 				ZIndex = 3,
 			}, btn)
-			corner(ul, 999)
+			corner(accentBar, 999)
 
-			local ref = {btn=btn, lbl=lbl, ul=ul, ulGlow=ulGlow, key=pageKey}
+			-- Keep old ul/ulGlow references alive so existing selection code works
+			local ulGlow = new("Frame", {Size=UDim2.new(0,0,0,0), BackgroundTransparency=1, BorderSizePixel=0, Visible=false, ZIndex=1}, btn)
+			local ul     = new("Frame", {Size=UDim2.new(0,0,0,0), BackgroundTransparency=1, BorderSizePixel=0, Visible=false, ZIndex=1}, btn)
+
+			local ref = {btn=btn, lbl=lbl, ul=ul, ulGlow=ulGlow, accentBar=accentBar, key=pageKey}
 			table.insert(sbItemRefs, ref)
 
 			btn.MouseButton1Click:Connect(function()
 				for _, r in ipairs(sbItemRefs) do
-					tween(r.lbl, {TextColor3=Color3.fromRGB(105,105,105)}, 0.12)
+					tween(r.lbl, {TextColor3=Color3.fromRGB(140,140,140)}, 0.12)
 					r.lbl.Font = Enum.Font.Gotham
 					r.ul.Visible = false
 					r.ulGlow.Visible = false
+					if r.accentBar then r.accentBar.Visible = false end
+					tween(r.btn, {BackgroundTransparency=1}, 0.12)
 				end
-				tween(lbl, {TextColor3=Color3.fromRGB(225,225,225)}, 0.12)
+				tween(lbl, {TextColor3=Color3.fromRGB(235,235,235)}, 0.12)
 				lbl.Font = Enum.Font.GothamBold
 				ul.Visible = true
 				ulGlow.Visible = true
+				accentBar.Visible = true
+				tween(btn, {BackgroundColor3=Color3.fromRGB(28,28,28), BackgroundTransparency=0}, 0.12)
 				showPage(pageKey)
 			end)
 			btn.MouseEnter:Connect(function()
-				if not ul.Visible then tween(lbl, {TextColor3=Color3.fromRGB(150,150,150)}, 0.1) end
+				if not accentBar.Visible then tween(lbl, {TextColor3=Color3.fromRGB(180,180,180)}, 0.1) end
 			end)
 			btn.MouseLeave:Connect(function()
-				if not ul.Visible then tween(lbl, {TextColor3=Color3.fromRGB(105,105,105)}, 0.1) end
+				if not accentBar.Visible then tween(lbl, {TextColor3=Color3.fromRGB(140,140,140)}, 0.1) end
 			end)
 
 			-- Auto-select first page
 			if #sbItemRefs == 1 then
-				lbl.TextColor3 = Color3.fromRGB(225,225,225)
+				lbl.TextColor3 = Color3.fromRGB(235,235,235)
 				lbl.Font = Enum.Font.GothamBold
 				ul.Visible = true
 				ulGlow.Visible = true
+				accentBar.Visible = true
+				btn.BackgroundColor3 = Color3.fromRGB(28,28,28)
+				btn.BackgroundTransparency = 0
 				showPage(pageKey)
 			end
 
