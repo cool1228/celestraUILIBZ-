@@ -600,17 +600,8 @@ function Celestra:CreateWindow(config)
 		local subLayout = new("UIListLayout", {SortOrder=Enum.SortOrder.LayoutOrder, Padding=UDim.new(0,0)}, subContainer)
 
 		local expanded = true
-		-- Track full height so we can restore it on expand
+		-- fullHeight is set directly in AddPage via pageOrder * btnH
 		local fullHeight = 0
-		subLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-			if expanded then
-				fullHeight = subLayout.AbsoluteContentSize.Y
-				subContainer.Size = UDim2.new(1, 0, 0, fullHeight)
-			end
-			task.defer(function()
-				sbScroll.CanvasSize = UDim2.new(0, 0, 0, sbLayout.AbsoluteContentSize.Y + 12)
-			end)
-		end)
 
 		local catBtn = new("TextButton", {
 			Size = UDim2.new(1,0,1,0),
@@ -638,7 +629,13 @@ function Celestra:CreateWindow(config)
 				end)
 			end
 			task.delay(0.22, function()
-				sbScroll.CanvasSize = UDim2.new(0, 0, 0, sbLayout.AbsoluteContentSize.Y + 12)
+				local total = 12
+				for _, child in ipairs(sbScroll:GetChildren()) do
+					if child:IsA("Frame") or child:IsA("TextButton") then
+						total = total + child.Size.Y.Offset
+					end
+				end
+				sbScroll.CanvasSize = UDim2.new(0, 0, 0, total)
 			end)
 		end)
 
@@ -703,20 +700,22 @@ function Celestra:CreateWindow(config)
 			local ref = {btn=btn, lbl=lbl, ul=ul, ulGlow=ulGlow, key=pageKey}
 			table.insert(sbItemRefs, ref)
 
-			-- Immediately resize subContainer to fit all page buttons so far
-			-- (AbsoluteContentSize fires async; this guarantees correct size on first frame)
-			do
-				local count = 0
-				for _, c in ipairs(subContainer:GetChildren()) do
-					if c:IsA("TextButton") then count = count + 1 end
+			-- Immediately resize subContainer: count buttons * known height, no async needed
+			self._pageOrder = self._pageOrder  -- already incremented above
+			local h = self._pageOrder * sbBtnH
+			fullHeight = h
+			subContainer.Size = UDim2.new(1, 0, 0, h)
+			-- Sidebar canvas: 12px top padding + 30px per catFrame + fullHeight per subContainer
+			-- Use task.defer so all sibling categories have also set their sizes first
+			task.defer(function()
+				local total = 12
+				for _, child in ipairs(sbScroll:GetChildren()) do
+					if child:IsA("Frame") or child:IsA("TextButton") then
+						total = total + child.Size.Y.Offset
+					end
 				end
-				local h = count * sbBtnH
-				fullHeight = h
-				subContainer.Size = UDim2.new(1, 0, 0, h)
-				task.defer(function()
-					sbScroll.CanvasSize = UDim2.new(0, 0, 0, sbLayout.AbsoluteContentSize.Y + 12)
-				end)
-			end
+				sbScroll.CanvasSize = UDim2.new(0, 0, 0, total)
+			end)
 
 			btn.MouseButton1Click:Connect(function()
 				for _, r in ipairs(sbItemRefs) do
