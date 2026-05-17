@@ -143,6 +143,8 @@ function Celestra:CreateWindow(config)
 	-- Drag logic
 	local dragging, dragStart, startPos, dragInput
 	local dragLocked = false   -- when true, title bar drag is disabled
+	-- Shared state so MobileButton drag can read the lock flag
+	local _mobileLockState = { locked = false }
 	local function updateDrag(input)
 		if dragLocked then return end
 		local scale = uiScale.Scale > 0 and uiScale.Scale or 1
@@ -285,7 +287,7 @@ function Celestra:CreateWindow(config)
 	end)
 
 	-- ── Sidebar ──
-	local sbW = isTouchOnly and 215 or 175   -- wider on mobile so page names aren't clipped
+	local sbW = isTouchOnly and 230 or 175   -- wider on mobile so page names aren't clipped
 	local sidebar = new("Frame", {
 		Size = UDim2.new(0, sbW, 1, -46 - 28),
 		Position = UDim2.new(0, 0, 0, 46),
@@ -306,10 +308,11 @@ function Celestra:CreateWindow(config)
 		Size = UDim2.new(1, -1, 1, 0),
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
-		ScrollBarThickness = 0,
-		ScrollingEnabled = false,
+		ScrollBarThickness = isTouchOnly and 2 or 0,
+		ScrollBarImageColor3 = Color3.fromRGB(55,55,55),
+		ScrollingEnabled = true,
 		ScrollingDirection = Enum.ScrollingDirection.Y,
-		ElasticBehavior = Enum.ElasticBehavior.Never,
+		ElasticBehavior = Enum.ElasticBehavior.WhenScrollable,
 		CanvasSize = UDim2.new(0,0,0,0),
 		Active = true,
 		ZIndex = 2,
@@ -629,7 +632,7 @@ function Celestra:CreateWindow(config)
 			local page = makePage(pageKey)
 
 			-- Sidebar item
-			local sbBtnH = isTouchOnly and 38 or 28
+			local sbBtnH = isTouchOnly and 44 or 28
 			local btn = new("TextButton", {
 				Size = UDim2.new(1,0,0,sbBtnH),
 				BackgroundTransparency = 1,
@@ -640,15 +643,16 @@ function Celestra:CreateWindow(config)
 			}, subContainer)
 
 			local lbl = new("TextLabel", {
-				Size = UDim2.new(1,-8,1,0),   -- near full width so text never clips
+				Size = UDim2.new(1, isTouchOnly and -18 or -36, 1, 0),   -- leave room on right for indent
 				Position = UDim2.new(0, isTouchOnly and 14 or 28, 0, 0),
 				BackgroundTransparency = 1,
 				Text = label,
 				TextColor3 = Color3.fromRGB(105,105,105),
-				TextSize = isTouchOnly and 15 or 13,
+				TextSize = isTouchOnly and 13 or 13,
 				Font = Enum.Font.Gotham,
 				TextXAlignment = Enum.TextXAlignment.Left,
 				TextTruncate = Enum.TextTruncate.None,
+				TextWrapped = false,
 				ZIndex = 2,
 			}, btn)
 
@@ -1433,6 +1437,7 @@ function Celestra:CreateWindow(config)
 					local fDragging, fDragStart, fStartPos = false, nil, nil
 
 					floatBtn.InputBegan:Connect(function(i)
+						if _mobileLockState.locked then return end
 						if i.UserInputType == Enum.UserInputType.Touch or
 						   i.UserInputType == Enum.UserInputType.MouseButton1 then
 							fDragging  = true
@@ -1442,7 +1447,7 @@ function Celestra:CreateWindow(config)
 					end)
 					-- Track on UIS so we never lose the event even if finger drifts off button
 					UserInputService.InputChanged:Connect(function(i)
-						if fDragging and (i.UserInputType == Enum.UserInputType.Touch or
+						if fDragging and not _mobileLockState.locked and (i.UserInputType == Enum.UserInputType.Touch or
 						                  i.UserInputType == Enum.UserInputType.MouseMovement) then
 							local scale = uiScale.Scale > 0 and uiScale.Scale or 1
 							local d = (Vector2.new(i.Position.X, i.Position.Y) - fDragStart) / scale
@@ -1457,6 +1462,11 @@ function Celestra:CreateWindow(config)
 						   i.UserInputType == Enum.UserInputType.MouseButton1 then
 							fDragging = false
 						end
+					end)
+					-- Stop any in-progress drag the moment lock is engaged
+					local _lockWatchConn
+					_lockWatchConn = game:GetService("RunService").Heartbeat:Connect(function()
+						if _mobileLockState.locked then fDragging = false end
 					end)
 
 					-- Tap fires callback (only if not a drag)
@@ -1995,6 +2005,7 @@ function Celestra:CreateWindow(config)
 					local dist = (Vector2.new(i.Position.X, i.Position.Y) - lkDragStart).Magnitude
 					if dist < 12 then
 						dragLocked = not dragLocked
+						_mobileLockState.locked = dragLocked
 						if dragLocked then
 							lockIcon.Text = "🔒 Locked"
 							lockIcon.TextColor3 = Color3.fromRGB(220,100,100)
