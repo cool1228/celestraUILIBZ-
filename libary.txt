@@ -317,7 +317,7 @@ function Celestra:CreateWindow(config)
 		ZIndex = 2,
 	}, sidebar)
 
-	local sbLayout = new("UIListLayout", {SortOrder=Enum.SortOrder.LayoutOrder, Padding=UDim.new(0,0)}, sbScroll)
+	local sbLayout = new("UIListLayout", {SortOrder=Enum.SortOrder.LayoutOrder, Padding=UDim.new(0, isTouchOnly and 10 or 0)}, sbScroll)
 	sbLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
 		sbScroll.CanvasSize = UDim2.new(0,0,0,sbLayout.AbsoluteContentSize.Y)
 	end)
