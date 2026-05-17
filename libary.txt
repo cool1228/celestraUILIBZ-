@@ -600,8 +600,17 @@ function Celestra:CreateWindow(config)
 		local subLayout = new("UIListLayout", {SortOrder=Enum.SortOrder.LayoutOrder, Padding=UDim.new(0,0)}, subContainer)
 
 		local expanded = true
-		-- fullHeight is set directly in AddPage via pageOrder * btnH
-		local fullHeight = 0
+		local sbBtnH_cat = isTouchOnly and 38 or 28  -- store so collapse can recompute
+
+		local function refreshCanvas()
+			local total = 12
+			for _, child in ipairs(sbScroll:GetChildren()) do
+				if child:IsA("Frame") or child:IsA("TextButton") then
+					total = total + child.Size.Y.Offset
+				end
+			end
+			sbScroll.CanvasSize = UDim2.new(0, 0, 0, total)
+		end
 
 		local catBtn = new("TextButton", {
 			Size = UDim2.new(1,0,1,0),
@@ -613,14 +622,19 @@ function Celestra:CreateWindow(config)
 			expanded = not expanded
 			arrow.Text = expanded and "−" or "+"
 			if expanded then
-				-- Show all page buttons and restore height
+				-- Recompute height from button count (never trust AbsoluteContentSize)
+				local count = 0
 				for _, child in ipairs(subContainer:GetChildren()) do
-					if child:IsA("TextButton") then child.Visible = true end
+					if child:IsA("TextButton") then
+						child.Visible = true
+						count = count + 1
+					end
 				end
-				tween(subContainer, {Size=UDim2.new(1,0,0,fullHeight)}, 0.2)
+				local h = count * sbBtnH_cat
+				subContainer.Size = UDim2.new(1, 0, 0, h)
+				tween(subContainer, {Size=UDim2.new(1,0,0,h)}, 0.2)
 			else
-				-- Collapse: tween to 0 then hide children so they cant be tapped
-				fullHeight = subLayout.AbsoluteContentSize.Y
+				-- Collapse: tween to 0 then hide so buttons cant be tapped
 				tween(subContainer, {Size=UDim2.new(1,0,0,0)}, 0.2)
 				task.delay(0.21, function()
 					for _, child in ipairs(subContainer:GetChildren()) do
@@ -628,15 +642,7 @@ function Celestra:CreateWindow(config)
 					end
 				end)
 			end
-			task.delay(0.22, function()
-				local total = 12
-				for _, child in ipairs(sbScroll:GetChildren()) do
-					if child:IsA("Frame") or child:IsA("TextButton") then
-						total = total + child.Size.Y.Offset
-					end
-				end
-				sbScroll.CanvasSize = UDim2.new(0, 0, 0, total)
-			end)
+			task.delay(0.22, refreshCanvas)
 		end)
 
 		-- Category object
@@ -653,7 +659,7 @@ function Celestra:CreateWindow(config)
 			local page = makePage(pageKey)
 
 			-- Sidebar item
-			local sbBtnH = isTouchOnly and 38 or 28
+			local sbBtnH = sbBtnH_cat  -- use category-level constant
 			local btn = new("TextButton", {
 				Size = UDim2.new(1,0,0,sbBtnH),
 				BackgroundTransparency = 1,
