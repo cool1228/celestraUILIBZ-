@@ -143,8 +143,7 @@ function Celestra:CreateWindow(config)
 	-- Drag logic
 	local dragging, dragStart, startPos, dragInput
 	local dragLocked = false   -- when true, title bar drag is disabled
-	-- Shared state so MobileButton drag can read the lock flag
-	local _mobileLockState = { locked = false }
+	local mobileBtnsLocked = false  -- when true, floating mobile buttons cannot be dragged
 	local function updateDrag(input)
 		if dragLocked then return end
 		local scale = uiScale.Scale > 0 and uiScale.Scale or 1
@@ -287,7 +286,7 @@ function Celestra:CreateWindow(config)
 	end)
 
 	-- ── Sidebar ──
-	local sbW = isTouchOnly and 272 or 175   -- wider on mobile so page names aren't clipped
+	local sbW = isTouchOnly and 215 or 175   -- wider on mobile so page names aren't clipped
 	local sidebar = new("Frame", {
 		Size = UDim2.new(0, sbW, 1, -46 - 28),
 		Position = UDim2.new(0, 0, 0, 46),
@@ -560,7 +559,7 @@ function Celestra:CreateWindow(config)
 		local lo = self._categoryOrder * 2
 
 		local catFrame = new("Frame", {
-			Size = UDim2.new(1,0,0, isTouchOnly and 40 or 30),
+			Size = UDim2.new(1,0,0,30),
 			BackgroundTransparency = 1,
 			BorderSizePixel = 0,
 			LayoutOrder = lo,
@@ -573,7 +572,7 @@ function Celestra:CreateWindow(config)
 			BackgroundTransparency = 1,
 			Text = label:upper(),
 			TextColor3 = Color3.fromRGB(130,130,130),
-			TextSize = isTouchOnly and 18 or 11,
+			TextSize = 11,
 			Font = Enum.Font.GothamBold,
 			TextXAlignment = Enum.TextXAlignment.Left,
 			ZIndex = 2,
@@ -585,7 +584,7 @@ function Celestra:CreateWindow(config)
 			BackgroundTransparency = 1,
 			Text = "−",
 			TextColor3 = Color3.fromRGB(60,60,60),
-			TextSize = isTouchOnly and 20 or 14,
+			TextSize = 14,
 			Font = Enum.Font.GothamBold,
 			ZIndex = 2,
 		}, catFrame)
@@ -593,7 +592,6 @@ function Celestra:CreateWindow(config)
 		local subContainer = new("Frame", {
 			BackgroundTransparency = 1,
 			BorderSizePixel = 0,
-			Size = UDim2.new(1,0,0,0),
 			LayoutOrder = lo + 0.5,
 			ZIndex = 2,
 			ClipsDescendants = true,
@@ -602,13 +600,9 @@ function Celestra:CreateWindow(config)
 		local subLayout = new("UIListLayout", {SortOrder=Enum.SortOrder.LayoutOrder, Padding=UDim.new(0,0)}, subContainer)
 
 		local expanded = true
-		local function refreshSubSize()
-			task.defer(function()
-				local h = expanded and subLayout.AbsoluteContentSize.Y or 0
-				subContainer.Size = UDim2.new(1,0,0,h)
-			end)
-		end
-		subLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(refreshSubSize)
+		subLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+			subContainer.Size = UDim2.new(1,0,0, expanded and subLayout.AbsoluteContentSize.Y or 0)
+		end)
 
 		local catBtn = new("TextButton", {
 			Size = UDim2.new(1,0,1,0),
@@ -637,7 +631,7 @@ function Celestra:CreateWindow(config)
 			local page = makePage(pageKey)
 
 			-- Sidebar item
-			local sbBtnH = isTouchOnly and 52 or 28
+			local sbBtnH = isTouchOnly and 38 or 28
 			local btn = new("TextButton", {
 				Size = UDim2.new(1,0,0,sbBtnH),
 				BackgroundTransparency = 1,
@@ -648,71 +642,68 @@ function Celestra:CreateWindow(config)
 			}, subContainer)
 
 			local lbl = new("TextLabel", {
-				Size = UDim2.new(1, isTouchOnly and -24 or -36, 1, 0),
-				Position = UDim2.new(0, isTouchOnly and 20 or 28, 0, 0),
+				Size = UDim2.new(1,-8,1,0),   -- near full width so text never clips
+				Position = UDim2.new(0, isTouchOnly and 14 or 28, 0, 0),
 				BackgroundTransparency = 1,
 				Text = label,
-				TextColor3 = Color3.fromRGB(140,140,140),
+				TextColor3 = Color3.fromRGB(105,105,105),
 				TextSize = isTouchOnly and 22 or 13,
 				Font = Enum.Font.Gotham,
 				TextXAlignment = Enum.TextXAlignment.Left,
 				TextTruncate = Enum.TextTruncate.None,
-				TextWrapped = false,
-				ZIndex = 3,
+				ZIndex = 2,
 			}, btn)
 
-			-- Active indicator: left accent bar (much more visible than bottom underline)
-			local accentBar = new("Frame", {
-				Size = UDim2.new(0, isTouchOnly and 4 or 3, isTouchOnly and 0.55 or 0.5, 0),
-				Position = UDim2.new(0, isTouchOnly and 6 or 8, 0.5, 0),
-				AnchorPoint = Vector2.new(0, 0.5),
+			local ulGlow = new("Frame", {
+				Size = UDim2.new(0,22,0,4),
+				Position = UDim2.new(0,27,1,-5),
+				BackgroundColor3 = Color3.fromRGB(45,110,220),
+				BackgroundTransparency = 0.65,
+				BorderSizePixel = 0,
+				Visible = false,
+				ZIndex = 2,
+			}, btn)
+			corner(ulGlow, 999)
+
+			local ul = new("Frame", {
+				Size = UDim2.new(0,20,0,2),
+				Position = UDim2.new(0,28,1,-4),
 				BackgroundColor3 = Color3.fromRGB(60,130,240),
 				BorderSizePixel = 0,
 				Visible = false,
 				ZIndex = 3,
 			}, btn)
-			corner(accentBar, 999)
+			corner(ul, 999)
 
-			-- Keep old ul/ulGlow references alive so existing selection code works
-			local ulGlow = new("Frame", {Size=UDim2.new(0,0,0,0), BackgroundTransparency=1, BorderSizePixel=0, Visible=false, ZIndex=1}, btn)
-			local ul     = new("Frame", {Size=UDim2.new(0,0,0,0), BackgroundTransparency=1, BorderSizePixel=0, Visible=false, ZIndex=1}, btn)
-
-			local ref = {btn=btn, lbl=lbl, ul=ul, ulGlow=ulGlow, accentBar=accentBar, key=pageKey}
+			local ref = {btn=btn, lbl=lbl, ul=ul, ulGlow=ulGlow, key=pageKey}
 			table.insert(sbItemRefs, ref)
 
 			btn.MouseButton1Click:Connect(function()
 				for _, r in ipairs(sbItemRefs) do
-					tween(r.lbl, {TextColor3=Color3.fromRGB(140,140,140)}, 0.12)
+					tween(r.lbl, {TextColor3=Color3.fromRGB(105,105,105)}, 0.12)
 					r.lbl.Font = Enum.Font.Gotham
 					r.ul.Visible = false
 					r.ulGlow.Visible = false
-					if r.accentBar then r.accentBar.Visible = false end
-					tween(r.btn, {BackgroundTransparency=1}, 0.12)
 				end
-				tween(lbl, {TextColor3=Color3.fromRGB(235,235,235)}, 0.12)
+				tween(lbl, {TextColor3=Color3.fromRGB(225,225,225)}, 0.12)
 				lbl.Font = Enum.Font.GothamBold
 				ul.Visible = true
 				ulGlow.Visible = true
-				accentBar.Visible = true
-				tween(btn, {BackgroundColor3=Color3.fromRGB(28,28,28), BackgroundTransparency=0}, 0.12)
 				showPage(pageKey)
 			end)
 			btn.MouseEnter:Connect(function()
-				if not accentBar.Visible then tween(lbl, {TextColor3=Color3.fromRGB(180,180,180)}, 0.1) end
+				if not ul.Visible then tween(lbl, {TextColor3=Color3.fromRGB(150,150,150)}, 0.1) end
 			end)
 			btn.MouseLeave:Connect(function()
-				if not accentBar.Visible then tween(lbl, {TextColor3=Color3.fromRGB(140,140,140)}, 0.1) end
+				if not ul.Visible then tween(lbl, {TextColor3=Color3.fromRGB(105,105,105)}, 0.1) end
 			end)
 
 			-- Auto-select first page
 			if #sbItemRefs == 1 then
-				lbl.TextColor3 = Color3.fromRGB(235,235,235)
+				lbl.TextColor3 = Color3.fromRGB(225,225,225)
 				lbl.Font = Enum.Font.GothamBold
 				ul.Visible = true
 				ulGlow.Visible = true
-				accentBar.Visible = true
-				btn.BackgroundColor3 = Color3.fromRGB(28,28,28)
-				btn.BackgroundTransparency = 0
 				showPage(pageKey)
 			end
 
@@ -1444,7 +1435,7 @@ function Celestra:CreateWindow(config)
 					local fDragging, fDragStart, fStartPos = false, nil, nil
 
 					floatBtn.InputBegan:Connect(function(i)
-						if _mobileLockState.locked then return end
+						if mobileBtnsLocked then return end
 						if i.UserInputType == Enum.UserInputType.Touch or
 						   i.UserInputType == Enum.UserInputType.MouseButton1 then
 							fDragging  = true
@@ -1454,7 +1445,7 @@ function Celestra:CreateWindow(config)
 					end)
 					-- Track on UIS so we never lose the event even if finger drifts off button
 					UserInputService.InputChanged:Connect(function(i)
-						if fDragging and not _mobileLockState.locked and (i.UserInputType == Enum.UserInputType.Touch or
+						if fDragging and not mobileBtnsLocked and (i.UserInputType == Enum.UserInputType.Touch or
 						                  i.UserInputType == Enum.UserInputType.MouseMovement) then
 							local scale = uiScale.Scale > 0 and uiScale.Scale or 1
 							local d = (Vector2.new(i.Position.X, i.Position.Y) - fDragStart) / scale
@@ -1469,11 +1460,6 @@ function Celestra:CreateWindow(config)
 						   i.UserInputType == Enum.UserInputType.MouseButton1 then
 							fDragging = false
 						end
-					end)
-					-- Stop any in-progress drag the moment lock is engaged
-					local _lockWatchConn
-					_lockWatchConn = game:GetService("RunService").Heartbeat:Connect(function()
-						if _mobileLockState.locked then fDragging = false end
 					end)
 
 					-- Tap fires callback (only if not a drag)
@@ -2011,8 +1997,8 @@ function Celestra:CreateWindow(config)
 				if lkDragging and lkDragStart then
 					local dist = (Vector2.new(i.Position.X, i.Position.Y) - lkDragStart).Magnitude
 					if dist < 12 then
-						_mobileLockState.locked = not _mobileLockState.locked
-						if _mobileLockState.locked then
+						mobileBtnsLocked = not mobileBtnsLocked
+						if mobileBtnsLocked then
 							lockIcon.Text = "🔒 Locked"
 							lockIcon.TextColor3 = Color3.fromRGB(220,100,100)
 							tween(lockBtn, {BackgroundColor3=Color3.fromRGB(40,14,14)}, 0.15)
